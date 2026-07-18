@@ -1,0 +1,23 @@
+player_id,name,position,team,opponent,salary,projection
+1,Josh Allen,QB,BUF,MIA,8000,25.4
+2,Jalen Hurts,QB,PHI,DAL,7800,24.1
+3,Brock Purdy,QB,SF,LAR,6500,20.2
+4,Christian McCaffrey,RB,SF,LAR,9000,23.5
+5,Breece Hall,RB,NYJ,NE,7600,19.8
+6,James Cook,RB,BUF,MIA,6800,18.4
+7,Isiah Pacheco,RB,KC,LV,6500,17.2
+8,Value Running Back,RB,ARI,SEA,4800,13.1
+9,Justin Jefferson,WR,MIN,GB,8800,22.8
+10,CeeDee Lamb,WR,DAL,PHI,8500,22.1
+11,Amon-Ra St. Brown,WR,DET,CHI,8100,21.0
+12,Deebo Samuel,WR,SF,LAR,6900,17.3
+13,DeVonta Smith,WR,PHI,DAL,6400,16.7
+14,Midrange Receiver,WR,BUF,MIA,5600,14.9
+15,Value Receiver,WR,KC,LV,4300,12.2
+16,Punt Receiver,WR,ARI,SEA,3500,9.4
+17,Travis Kelce,TE,KC,LV,7000,17.0
+18,Sam LaPorta,TE,DET,CHI,6200,15.5
+19,Value Tight End,TE,GB,MIN,3900,10.5
+20,Bills DST,DST,BUF,MIA,3600,8.4
+21,49ers DST,DST,SF,LAR,3400,8.0
+22,Value DST,DST,ARI,SEA,2500,6.2
