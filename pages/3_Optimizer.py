@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import streamlit as st
 
 from config import SALARY_CAP
+from database import DatabaseManager
 from optimizer.lineup_optimizer import optimize_lineup
 
 
@@ -12,8 +15,10 @@ st.set_page_config(
     layout="wide",
 )
 
+database = DatabaseManager()
+
 st.title("⚙️ Lineup Optimizer")
-st.caption("Generate an optimal DraftKings NFL Classic lineup")
+st.caption("Generate and save DraftKings NFL Classic lineups")
 
 if "player_pool" not in st.session_state:
     st.warning(
@@ -29,8 +34,17 @@ active_slate_name = st.session_state.get(
     "Unsaved player pool",
 )
 
+active_slate_id = st.session_state.get("active_slate_id")
+
 st.subheader("Active slate")
 st.write(f"**{active_slate_name}**")
+
+if active_slate_id is None:
+    st.warning(
+        "This player pool has not been saved to the database. You may "
+        "generate a lineup, but you must save the slate from the "
+        "**Player Pool** page before the lineup can be stored."
+    )
 
 with st.sidebar:
     st.header("Optimizer settings")
@@ -147,6 +161,9 @@ if optimize_clicked:
     st.session_state.latest_lineup_projection = result.total_projection
     st.session_state.latest_lineup_status = result.status
 
+    st.session_state.latest_lineup_saved = False
+    st.session_state.latest_lineup_id = None
+
 if "latest_lineup" not in st.session_state:
     st.info("Configure the optimizer and generate a lineup.")
     st.stop()
@@ -217,6 +234,61 @@ st.dataframe(
         ),
     },
 )
+
+st.markdown("---")
+st.subheader("Save lineup")
+
+default_lineup_name = (
+    f"Lineup {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+)
+
+lineup_name = st.text_input(
+    "Lineup name",
+    value=default_lineup_name,
+    disabled=bool(st.session_state.get("latest_lineup_saved", False)),
+)
+
+save_lineup_clicked = st.button(
+    "Save lineup to database",
+    use_container_width=True,
+    disabled=(
+        active_slate_id is None
+        or bool(st.session_state.get("latest_lineup_saved", False))
+    ),
+)
+
+if save_lineup_clicked:
+    try:
+        lineup_id = database.save_lineup(
+            slate_id=int(active_slate_id),
+            lineup=lineup,
+            lineup_name=lineup_name,
+            total_salary=total_salary,
+            total_projection=total_projection,
+            solver_status=status,
+            salary_cap=int(salary_cap),
+            minimum_salary=int(minimum_salary),
+        )
+
+        st.session_state.latest_lineup_saved = True
+        st.session_state.latest_lineup_id = lineup_id
+
+        st.success(
+            f"Lineup saved successfully with lineup ID {lineup_id}."
+        )
+
+        st.rerun()
+
+    except Exception as exc:
+        st.error(f"Could not save lineup: {exc}")
+
+if st.session_state.get("latest_lineup_saved", False):
+    saved_lineup_id = st.session_state.get("latest_lineup_id")
+
+    st.success(
+        f"This lineup is saved in the database as lineup "
+        f"#{saved_lineup_id}."
+    )
 
 export = lineup[
     [
