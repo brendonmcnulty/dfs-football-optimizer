@@ -5,8 +5,9 @@ from datetime import datetime
 import streamlit as st
 
 from config import SALARY_CAP
+from core.settings import OptimizerSettings
 from database import DatabaseManager
-from optimizer.lineup_optimizer import optimize_lineup
+from services import OptimizerService
 
 
 st.set_page_config(
@@ -16,6 +17,7 @@ st.set_page_config(
 )
 
 database = DatabaseManager()
+optimizer_service = OptimizerService()
 
 st.title("⚙️ Lineup Optimizer")
 st.caption("Generate and save DraftKings NFL Classic lineups")
@@ -34,7 +36,9 @@ active_slate_name = st.session_state.get(
     "Unsaved player pool",
 )
 
-active_slate_id = st.session_state.get("active_slate_id")
+active_slate_id = st.session_state.get(
+    "active_slate_id"
+)
 
 st.subheader("Active slate")
 st.write(f"**{active_slate_name}**")
@@ -52,8 +56,20 @@ with st.sidebar:
     salary_cap = st.number_input(
         "Salary cap",
         min_value=1,
-        value=int(st.session_state.get("salary_cap", SALARY_CAP)),
+        value=int(
+            st.session_state.get(
+                "salary_cap",
+                SALARY_CAP,
+            )
+        ),
         step=500,
+    )
+
+    saved_minimum_salary = int(
+        st.session_state.get(
+            "minimum_salary",
+            0,
+        )
     )
 
     minimum_salary = st.number_input(
@@ -61,14 +77,21 @@ with st.sidebar:
         min_value=0,
         max_value=int(salary_cap),
         value=min(
-            int(st.session_state.get("minimum_salary", 0)),
+            saved_minimum_salary,
             int(salary_cap),
         ),
         step=100,
     )
 
     st.session_state.salary_cap = int(salary_cap)
-    st.session_state.minimum_salary = int(minimum_salary)
+    st.session_state.minimum_salary = int(
+        minimum_salary
+    )
+
+optimizer_settings = OptimizerSettings(
+    salary_cap=int(salary_cap),
+    minimum_salary=int(minimum_salary),
+)
 
 st.subheader("Player-pool summary")
 
@@ -138,46 +161,60 @@ optimize_clicked = st.button(
 
 if optimize_clicked:
     try:
-        result = optimize_lineup(
-            players,
-            salary_cap=int(salary_cap),
-            minimum_salary=int(minimum_salary),
+        result = optimizer_service.generate_lineup(
+            players=players,
+            settings=optimizer_settings,
         )
+
+        st.session_state.latest_lineup = (
+            result.lineup.copy()
+        )
+
+        st.session_state.latest_lineup_salary = (
+            result.total_salary
+        )
+
+        st.session_state.latest_lineup_projection = (
+            result.total_projection
+        )
+
+        st.session_state.latest_lineup_status = (
+            result.status
+        )
+
+        st.session_state.latest_lineup_saved = False
+        st.session_state.latest_lineup_id = None
 
     except Exception as exc:
         st.error(f"Optimizer error: {exc}")
-        st.stop()
-
-    if result.lineup.empty:
-        st.error(
-            "No valid lineup was found. Review player locks, exclusions, "
-            "salary settings, and position availability. "
-            f"Solver status: {result.status}"
-        )
-        st.stop()
-
-    st.session_state.latest_lineup = result.lineup.copy()
-    st.session_state.latest_lineup_salary = result.total_salary
-    st.session_state.latest_lineup_projection = result.total_projection
-    st.session_state.latest_lineup_status = result.status
-
-    st.session_state.latest_lineup_saved = False
-    st.session_state.latest_lineup_id = None
 
 if "latest_lineup" not in st.session_state:
-    st.info("Configure the optimizer and generate a lineup.")
+    st.info(
+        "Configure the optimizer and generate a lineup."
+    )
     st.stop()
 
 lineup = st.session_state.latest_lineup.copy()
-total_salary = int(st.session_state.latest_lineup_salary)
+
+total_salary = int(
+    st.session_state.latest_lineup_salary
+)
+
 total_projection = float(
     st.session_state.latest_lineup_projection
 )
-status = str(st.session_state.latest_lineup_status)
 
-st.success(f"Lineup generated — solver status: {status}")
+status = str(
+    st.session_state.latest_lineup_status
+)
 
-metric_column_1, metric_column_2, metric_column_3 = st.columns(3)
+st.success(
+    f"Lineup generated — solver status: {status}"
+)
+
+metric_column_1, metric_column_2, metric_column_3 = (
+    st.columns(3)
+)
 
 metric_column_1.metric(
     "Projected points",
@@ -239,13 +276,23 @@ st.markdown("---")
 st.subheader("Save lineup")
 
 default_lineup_name = (
-    f"Lineup {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    "Lineup "
+    + datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+)
+
+latest_lineup_saved = bool(
+    st.session_state.get(
+        "latest_lineup_saved",
+        False,
+    )
 )
 
 lineup_name = st.text_input(
     "Lineup name",
     value=default_lineup_name,
-    disabled=bool(st.session_state.get("latest_lineup_saved", False)),
+    disabled=latest_lineup_saved,
 )
 
 save_lineup_clicked = st.button(
@@ -253,7 +300,7 @@ save_lineup_clicked = st.button(
     use_container_width=True,
     disabled=(
         active_slate_id is None
-        or bool(st.session_state.get("latest_lineup_saved", False))
+        or latest_lineup_saved
     ),
 )
 
@@ -266,28 +313,33 @@ if save_lineup_clicked:
             total_salary=total_salary,
             total_projection=total_projection,
             solver_status=status,
-            salary_cap=int(salary_cap),
-            minimum_salary=int(minimum_salary),
+            salary_cap=optimizer_settings.salary_cap,
+            minimum_salary=(
+                optimizer_settings.minimum_salary
+            ),
         )
 
         st.session_state.latest_lineup_saved = True
         st.session_state.latest_lineup_id = lineup_id
 
-        st.success(
-            f"Lineup saved successfully with lineup ID {lineup_id}."
-        )
-
         st.rerun()
 
     except Exception as exc:
-        st.error(f"Could not save lineup: {exc}")
+        st.error(
+            f"Could not save lineup: {exc}"
+        )
 
-if st.session_state.get("latest_lineup_saved", False):
-    saved_lineup_id = st.session_state.get("latest_lineup_id")
+if st.session_state.get(
+    "latest_lineup_saved",
+    False,
+):
+    saved_lineup_id = st.session_state.get(
+        "latest_lineup_id"
+    )
 
     st.success(
-        f"This lineup is saved in the database as lineup "
-        f"#{saved_lineup_id}."
+        "This lineup is saved in the database as "
+        f"lineup #{saved_lineup_id}."
     )
 
 export = lineup[
@@ -303,7 +355,9 @@ export = lineup[
 
 st.download_button(
     "Download lineup CSV",
-    data=export.to_csv(index=False).encode("utf-8"),
+    data=export.to_csv(
+        index=False
+    ).encode("utf-8"),
     file_name="optimized_lineup.csv",
     mime="text/csv",
 )
