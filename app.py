@@ -12,25 +12,32 @@ st.set_page_config(
 )
 
 database = DatabaseManager()
+
 saved_slates = database.list_slates()
+saved_lineups = database.list_lineups()
 
 st.title("🏈 DFS Football Optimizer")
 st.caption("DraftKings NFL Classic analytics and lineup optimization")
 
 st.markdown(
     """
-    Welcome to the DFS Football Optimizer.
-
-    Use the navigation menu in the sidebar to import player pools,
-    manage saved slates, and generate optimized lineups.
+    Use the sidebar navigation to import player pools, manage saved slates,
+    generate optimized lineups, and review previously saved lineups.
     """
 )
 
-metric_column_1, metric_column_2, metric_column_3 = st.columns(3)
+metric_column_1, metric_column_2, metric_column_3, metric_column_4 = (
+    st.columns(4)
+)
 
 metric_column_1.metric(
     "Saved slates",
     len(saved_slates),
+)
+
+metric_column_2.metric(
+    "Saved lineups",
+    len(saved_lineups),
 )
 
 if "player_pool" in st.session_state:
@@ -38,17 +45,17 @@ if "player_pool" in st.session_state:
 else:
     loaded_player_count = 0
 
-metric_column_2.metric(
+metric_column_3.metric(
     "Players currently loaded",
     loaded_player_count,
 )
 
-if "active_slate_name" in st.session_state:
-    active_slate_name = st.session_state.active_slate_name
-else:
-    active_slate_name = "None"
+active_slate_name = st.session_state.get(
+    "active_slate_name",
+    "None",
+)
 
-metric_column_3.metric(
+metric_column_4.metric(
     "Active slate",
     active_slate_name,
 )
@@ -73,10 +80,20 @@ st.markdown(
 
     Generate an optimal lineup from the active player pool. Configure the
     salary cap and minimum salary before optimizing.
+
+    ### 4. Saved Lineups
+
+    Review lineups stored in SQLite, inspect every roster spot, and download
+    previously generated lineups as CSV files.
     """
 )
 
-st.info(
-    "Begin on the **Player Pool** page, or open **Saved Slates** to load a "
-    "player pool already stored in the database."
-)
+if "player_pool" not in st.session_state:
+    st.info(
+        "Begin on the **Player Pool** page, or open **Saved Slates** to load "
+        "a player pool already stored in the database."
+    )
+else:
+    st.success(
+        f"{loaded_player_count} players are loaded and ready for optimization."
+    )
