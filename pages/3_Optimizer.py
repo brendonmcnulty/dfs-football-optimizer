@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pandas as pd
 import streamlit as st
 
 from config import SALARY_CAP
@@ -20,7 +21,9 @@ database = DatabaseManager()
 optimizer_service = OptimizerService()
 
 st.title("⚙️ Lineup Optimizer")
-st.caption("Generate and save DraftKings NFL Classic lineups")
+st.caption(
+    "Generate multiple unique DraftKings NFL Classic lineups"
+)
 
 if "player_pool" not in st.session_state:
     st.warning(
@@ -45,9 +48,9 @@ st.write(f"**{active_slate_name}**")
 
 if active_slate_id is None:
     st.warning(
-        "This player pool has not been saved to the database. You may "
-        "generate a lineup, but you must save the slate from the "
-        "**Player Pool** page before the lineup can be stored."
+        "This player pool has not been saved to the database. "
+        "You may generate lineups, but the slate must be saved "
+        "before a lineup can be stored."
     )
 
 with st.sidebar:
@@ -83,14 +86,58 @@ with st.sidebar:
         step=100,
     )
 
-    st.session_state.salary_cap = int(salary_cap)
+    lineup_count = st.number_input(
+        "Number of lineups",
+        min_value=1,
+        max_value=150,
+        value=int(
+            st.session_state.get(
+                "lineup_count",
+                5,
+            )
+        ),
+        step=1,
+    )
+
+    minimum_unique_players = st.slider(
+        "Minimum unique players",
+        min_value=1,
+        max_value=9,
+        value=int(
+            st.session_state.get(
+                "minimum_unique_players",
+                1,
+            )
+        ),
+        help=(
+            "Each generated lineup must differ from every earlier "
+            "lineup by at least this many players."
+        ),
+    )
+
+    st.session_state.salary_cap = int(
+        salary_cap
+    )
+
     st.session_state.minimum_salary = int(
         minimum_salary
+    )
+
+    st.session_state.lineup_count = int(
+        lineup_count
+    )
+
+    st.session_state.minimum_unique_players = int(
+        minimum_unique_players
     )
 
 optimizer_settings = OptimizerSettings(
     salary_cap=int(salary_cap),
     minimum_salary=int(minimum_salary),
+    lineup_count=int(lineup_count),
+    minimum_unique_players=int(
+        minimum_unique_players
+    ),
 )
 
 st.subheader("Player-pool summary")
@@ -106,20 +153,30 @@ metric_column_1.metric(
 
 metric_column_2.metric(
     "Positive projections",
-    int((players["projection"] > 0).sum()),
+    int(
+        (
+            players["projection"] > 0
+        ).sum()
+    ),
 )
 
 metric_column_3.metric(
     "Locked",
-    int(players["locked"].sum()),
+    int(
+        players["locked"].sum()
+    ),
 )
 
 metric_column_4.metric(
     "Excluded",
-    int(players["excluded"].sum()),
+    int(
+        players["excluded"].sum()
+    ),
 )
 
-with st.expander("Review active player pool"):
+with st.expander(
+    "Review active player pool"
+):
     st.dataframe(
         players[
             [
@@ -153,63 +210,177 @@ with st.expander("Review active player pool"):
         },
     )
 
-optimize_clicked = st.button(
-    "Generate optimal lineup",
+generate_clicked = st.button(
+    "Generate lineups",
     type="primary",
     use_container_width=True,
 )
 
-if optimize_clicked:
+if generate_clicked:
     try:
-        result = optimizer_service.generate_lineup(
-            players=players,
-            settings=optimizer_settings,
+        results = (
+            optimizer_service.generate_lineups(
+                players=players,
+                settings=optimizer_settings,
+            )
         )
 
-        st.session_state.latest_lineup = (
+        st.session_state.generated_lineups = [
             result.lineup.copy()
-        )
+            for result in results
+        ]
 
-        st.session_state.latest_lineup_salary = (
-            result.total_salary
-        )
+        st.session_state.generated_lineup_metadata = [
+            {
+                "total_salary": (
+                    result.total_salary
+                ),
+                "total_projection": (
+                    result.total_projection
+                ),
+                "status": result.status,
+            }
+            for result in results
+        ]
 
-        st.session_state.latest_lineup_projection = (
-            result.total_projection
-        )
-
-        st.session_state.latest_lineup_status = (
-            result.status
-        )
-
-        st.session_state.latest_lineup_saved = False
-        st.session_state.latest_lineup_id = None
+        st.session_state.saved_generated_lineups = {}
 
     except Exception as exc:
-        st.error(f"Optimizer error: {exc}")
+        st.error(
+            f"Optimizer error: {exc}"
+        )
 
-if "latest_lineup" not in st.session_state:
+if "generated_lineups" not in st.session_state:
     st.info(
-        "Configure the optimizer and generate a lineup."
+        "Configure the optimizer and generate one or more lineups."
     )
     st.stop()
 
-lineup = st.session_state.latest_lineup.copy()
+generated_lineups = (
+    st.session_state.generated_lineups
+)
+
+generated_metadata = (
+    st.session_state.generated_lineup_metadata
+)
+
+generated_count = len(
+    generated_lineups
+)
+
+if generated_count < int(lineup_count):
+    st.warning(
+        f"The optimizer generated {generated_count} of the "
+        f"{int(lineup_count)} requested lineups. The player pool "
+        "could not support more lineups under the current uniqueness, "
+        "lock, exclusion, and salary rules."
+    )
+else:
+    st.success(
+        f"Generated {generated_count} unique lineups."
+    )
+
+summary_records: list[dict] = []
+
+for lineup_index, metadata in enumerate(
+    generated_metadata,
+    start=1,
+):
+    summary_records.append(
+        {
+            "lineup_number": lineup_index,
+            "total_salary": int(
+                metadata["total_salary"]
+            ),
+            "salary_remaining": (
+                int(salary_cap)
+                - int(metadata["total_salary"])
+            ),
+            "total_projection": float(
+                metadata["total_projection"]
+            ),
+            "status": str(
+                metadata["status"]
+            ),
+        }
+    )
+
+summary_frame = pd.DataFrame(
+    summary_records
+)
+
+st.subheader("Generated lineup summary")
+
+st.dataframe(
+    summary_frame,
+    width="stretch",
+    hide_index=True,
+    column_config={
+        "lineup_number": st.column_config.NumberColumn(
+            "Lineup",
+            format="%d",
+        ),
+        "total_salary": st.column_config.NumberColumn(
+            "Salary",
+            format="$%d",
+        ),
+        "salary_remaining": st.column_config.NumberColumn(
+            "Remaining",
+            format="$%d",
+        ),
+        "total_projection": st.column_config.NumberColumn(
+            "Projection",
+            format="%.2f",
+        ),
+        "status": st.column_config.TextColumn(
+            "Status",
+        ),
+    },
+)
+
+selected_lineup_number = st.selectbox(
+    "Select a lineup to review",
+    options=list(
+        range(
+            1,
+            generated_count + 1,
+        )
+    ),
+    format_func=lambda number: (
+        f"Lineup {number}"
+    ),
+)
+
+selected_index = (
+    int(selected_lineup_number) - 1
+)
+
+selected_lineup = (
+    generated_lineups[
+        selected_index
+    ].copy()
+)
+
+selected_metadata = (
+    generated_metadata[
+        selected_index
+    ]
+)
 
 total_salary = int(
-    st.session_state.latest_lineup_salary
+    selected_metadata["total_salary"]
 )
 
 total_projection = float(
-    st.session_state.latest_lineup_projection
+    selected_metadata["total_projection"]
 )
 
 status = str(
-    st.session_state.latest_lineup_status
+    selected_metadata["status"]
 )
 
-st.success(
-    f"Lineup generated — solver status: {status}"
+st.subheader(
+    f"Lineup {selected_lineup_number}"
 )
 
 metric_column_1, metric_column_2, metric_column_3 = (
@@ -231,18 +402,18 @@ metric_column_3.metric(
     f"${int(salary_cap) - total_salary:,}",
 )
 
-display_columns = [
-    "roster_slot",
-    "name",
-    "position",
-    "team",
-    "opponent",
-    "salary",
-    "projection",
-]
-
 st.dataframe(
-    lineup[display_columns],
+    selected_lineup[
+        [
+            "roster_slot",
+            "name",
+            "position",
+            "team",
+            "opponent",
+            "salary",
+            "projection",
+        ]
+    ],
     width="stretch",
     hide_index=True,
     column_config={
@@ -273,54 +444,72 @@ st.dataframe(
 )
 
 st.markdown("---")
-st.subheader("Save lineup")
+st.subheader("Save selected lineup")
 
-default_lineup_name = (
-    "Lineup "
-    + datetime.now().strftime(
-        "%Y-%m-%d %H:%M:%S"
+saved_generated_lineups = (
+    st.session_state.get(
+        "saved_generated_lineups",
+        {},
     )
 )
 
-latest_lineup_saved = bool(
-    st.session_state.get(
-        "latest_lineup_saved",
-        False,
+selected_lineup_saved = (
+    selected_index
+    in saved_generated_lineups
+)
+
+default_lineup_name = (
+    f"Lineup {selected_lineup_number} - "
+    + datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
     )
 )
 
 lineup_name = st.text_input(
     "Lineup name",
     value=default_lineup_name,
-    disabled=latest_lineup_saved,
+    key=(
+        "lineup_name_"
+        f"{selected_lineup_number}"
+    ),
+    disabled=selected_lineup_saved,
 )
 
 save_lineup_clicked = st.button(
-    "Save lineup to database",
+    "Save selected lineup to database",
     use_container_width=True,
     disabled=(
         active_slate_id is None
-        or latest_lineup_saved
+        or selected_lineup_saved
     ),
 )
 
 if save_lineup_clicked:
     try:
         lineup_id = database.save_lineup(
-            slate_id=int(active_slate_id),
-            lineup=lineup,
+            slate_id=int(
+                active_slate_id
+            ),
+            lineup=selected_lineup,
             lineup_name=lineup_name,
             total_salary=total_salary,
             total_projection=total_projection,
             solver_status=status,
-            salary_cap=optimizer_settings.salary_cap,
+            salary_cap=(
+                optimizer_settings.salary_cap
+            ),
             minimum_salary=(
                 optimizer_settings.minimum_salary
             ),
         )
 
-        st.session_state.latest_lineup_saved = True
-        st.session_state.latest_lineup_id = lineup_id
+        saved_generated_lineups[
+            selected_index
+        ] = lineup_id
+
+        st.session_state.saved_generated_lineups = (
+            saved_generated_lineups
+        )
 
         st.rerun()
 
@@ -329,12 +518,11 @@ if save_lineup_clicked:
             f"Could not save lineup: {exc}"
         )
 
-if st.session_state.get(
-    "latest_lineup_saved",
-    False,
-):
-    saved_lineup_id = st.session_state.get(
-        "latest_lineup_id"
+if selected_lineup_saved:
+    saved_lineup_id = (
+        saved_generated_lineups[
+            selected_index
+        ]
     )
 
     st.success(
@@ -342,7 +530,7 @@ if st.session_state.get(
         f"lineup #{saved_lineup_id}."
     )
 
-export = lineup[
+selected_export = selected_lineup[
     [
         "roster_slot",
         "player_id",
@@ -354,10 +542,54 @@ export = lineup[
 ].copy()
 
 st.download_button(
-    "Download lineup CSV",
-    data=export.to_csv(
+    "Download selected lineup CSV",
+    data=selected_export.to_csv(
         index=False
     ).encode("utf-8"),
-    file_name="optimized_lineup.csv",
+    file_name=(
+        f"optimized_lineup_"
+        f"{selected_lineup_number}.csv"
+    ),
+    mime="text/csv",
+)
+
+portfolio_export_records: list[dict] = []
+
+for lineup_index, lineup in enumerate(
+    generated_lineups,
+    start=1,
+):
+    for _, player in lineup.iterrows():
+        portfolio_export_records.append(
+            {
+                "lineup_number": lineup_index,
+                "roster_slot": (
+                    player["roster_slot"]
+                ),
+                "player_id": (
+                    player["player_id"]
+                ),
+                "name": player["name"],
+                "position": (
+                    player["position"]
+                ),
+                "team": player["team"],
+                "salary": player["salary"],
+                "projection": (
+                    player["projection"]
+                ),
+            }
+        )
+
+portfolio_export = pd.DataFrame(
+    portfolio_export_records
+)
+
+st.download_button(
+    "Download all generated lineups CSV",
+    data=portfolio_export.to_csv(
+        index=False
+    ).encode("utf-8"),
+    file_name="generated_lineups.csv",
     mime="text/csv",
 )

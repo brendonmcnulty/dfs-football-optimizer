@@ -5,7 +5,7 @@ import pandas as pd
 from core.settings import OptimizerSettings
 from optimizer.lineup_optimizer import (
     OptimizationResult,
-    optimize_lineup,
+    optimize_lineups,
 )
 
 
@@ -44,9 +44,14 @@ class OptimizerService:
         """Validate a player pool before optimization."""
 
         if players.empty:
-            raise ValueError("The player pool is empty.")
+            raise ValueError(
+                "The player pool is empty."
+            )
 
-        missing_columns = self.REQUIRED_COLUMNS - set(players.columns)
+        missing_columns = (
+            self.REQUIRED_COLUMNS
+            - set(players.columns)
+        )
 
         if missing_columns:
             raise ValueError(
@@ -54,7 +59,11 @@ class OptimizerService:
                 f"{sorted(missing_columns)}"
             )
 
-        duplicate_player_ids = players["player_id"].astype(str).duplicated()
+        duplicate_player_ids = (
+            players["player_id"]
+            .astype(str)
+            .duplicated()
+        )
 
         if duplicate_player_ids.any():
             duplicated_names = players.loc[
@@ -64,7 +73,9 @@ class OptimizerService:
 
             raise ValueError(
                 "Duplicate player IDs were found for: "
-                + ", ".join(duplicated_names.tolist())
+                + ", ".join(
+                    duplicated_names.tolist()
+                )
             )
 
         normalized_positions = (
@@ -80,8 +91,10 @@ class OptimizerService:
             )
         )
 
-        invalid_position_mask = ~normalized_positions.isin(
-            self.VALID_POSITIONS
+        invalid_position_mask = (
+            ~normalized_positions.isin(
+                self.VALID_POSITIONS
+            )
         )
 
         if invalid_position_mask.any():
@@ -126,8 +139,17 @@ class OptimizerService:
                 "Player projections cannot be negative."
             )
 
-        locked = players["locked"].fillna(False).astype(bool)
-        excluded = players["excluded"].fillna(False).astype(bool)
+        locked = (
+            players["locked"]
+            .fillna(False)
+            .astype(bool)
+        )
+
+        excluded = (
+            players["excluded"]
+            .fillna(False)
+            .astype(bool)
+        )
 
         conflicting_players = players.loc[
             locked & excluded,
@@ -137,10 +159,14 @@ class OptimizerService:
         if not conflicting_players.empty:
             raise ValueError(
                 "These players are both locked and excluded: "
-                + ", ".join(conflicting_players.tolist())
+                + ", ".join(
+                    conflicting_players.tolist()
+                )
             )
 
-        available_players = players.loc[~excluded].copy()
+        available_players = players.loc[
+            ~excluded
+        ].copy()
 
         available_positions = (
             available_players["position"]
@@ -163,16 +189,23 @@ class OptimizerService:
             "DST": 1,
         }
 
-        for position, minimum_count in required_position_counts.items():
+        for (
+            position,
+            minimum_count,
+        ) in required_position_counts.items():
             available_count = int(
-                (available_positions == position).sum()
+                (
+                    available_positions
+                    == position
+                ).sum()
             )
 
             if available_count < minimum_count:
                 raise ValueError(
-                    f"At least {minimum_count} available {position} "
-                    f"player(s) are required. Only {available_count} "
-                    "are currently available."
+                    f"At least {minimum_count} available "
+                    f"{position} player(s) are required. "
+                    f"Only {available_count} are currently "
+                    "available."
                 )
 
         flex_count = int(
@@ -183,11 +216,14 @@ class OptimizerService:
 
         if flex_count < 7:
             raise ValueError(
-                "At least seven available RB, WR, and TE players are "
-                "required to fill the skill-position and FLEX slots."
+                "At least seven available RB, WR, and TE "
+                "players are required to fill the skill-position "
+                "and FLEX slots."
             )
 
-        locked_count = int(locked.sum())
+        locked_count = int(
+            locked.sum()
+        )
 
         if locked_count > 9:
             raise ValueError(
@@ -215,9 +251,15 @@ class OptimizerService:
             "DST": 1,
         }
 
-        for position, maximum_count in locked_position_limits.items():
+        for (
+            position,
+            maximum_count,
+        ) in locked_position_limits.items():
             position_count = int(
-                (locked_positions == position).sum()
+                (
+                    locked_positions
+                    == position
+                ).sum()
             )
 
             if position_count > maximum_count:
@@ -234,10 +276,21 @@ class OptimizerService:
 
         self.validate_player_pool(players)
 
-        prepared = players.copy().reset_index(drop=True)
+        prepared = (
+            players.copy()
+            .reset_index(drop=True)
+        )
 
-        prepared["player_id"] = prepared["player_id"].astype(str)
-        prepared["name"] = prepared["name"].astype(str).str.strip()
+        prepared["player_id"] = (
+            prepared["player_id"]
+            .astype(str)
+        )
+
+        prepared["name"] = (
+            prepared["name"]
+            .astype(str)
+            .str.strip()
+        )
 
         prepared["position"] = (
             prepared["position"]
@@ -291,27 +344,57 @@ class OptimizerService:
 
         return prepared
 
+    def generate_lineups(
+        self,
+        players: pd.DataFrame,
+        settings: OptimizerSettings,
+    ) -> list[OptimizationResult]:
+        """Validate inputs and generate multiple unique lineups."""
+
+        settings.validate()
+
+        prepared_players = (
+            self.prepare_player_pool(players)
+        )
+
+        results = optimize_lineups(
+            players=prepared_players,
+            lineup_count=settings.lineup_count,
+            minimum_unique_players=(
+                settings.minimum_unique_players
+            ),
+            salary_cap=settings.salary_cap,
+            minimum_salary=settings.minimum_salary,
+            solver_timeout_seconds=(
+                settings.solver_timeout_seconds
+            ),
+        )
+
+        if not results:
+            raise ValueError(
+                "The optimizer could not create a valid lineup."
+            )
+
+        return results
+
     def generate_lineup(
         self,
         players: pd.DataFrame,
         settings: OptimizerSettings,
     ) -> OptimizationResult:
-        """Validate inputs and generate one optimized lineup."""
+        """Generate one lineup for backward compatibility."""
 
-        settings.validate()
-
-        prepared_players = self.prepare_player_pool(players)
-
-        result = optimize_lineup(
-            players=prepared_players,
+        single_lineup_settings = OptimizerSettings(
             salary_cap=settings.salary_cap,
             minimum_salary=settings.minimum_salary,
+            solver_timeout_seconds=(
+                settings.solver_timeout_seconds
+            ),
+            lineup_count=1,
+            minimum_unique_players=1,
         )
 
-        if result.lineup.empty:
-            raise ValueError(
-                "The optimizer could not create a valid lineup. "
-                f"Solver status: {result.status}"
-            )
-
-        return result
+        return self.generate_lineups(
+            players=players,
+            settings=single_lineup_settings,
+        )[0]
