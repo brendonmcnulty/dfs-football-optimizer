@@ -11,7 +11,8 @@ from optimizer.lineup_optimizer import (
 
 class OptimizerService:
     """
-    Coordinate player-pool validation and lineup optimization.
+    Coordinate player-pool validation, lineup optimization,
+    and generated-portfolio analysis.
 
     Streamlit pages should use this service rather than calling the
     OR-Tools optimizer directly.
@@ -398,3 +399,154 @@ class OptimizerService:
             players=players,
             settings=single_lineup_settings,
         )[0]
+
+    def build_exposure_report(
+        self,
+        lineups: list[pd.DataFrame],
+    ) -> pd.DataFrame:
+        """
+        Calculate player exposure across a group of generated lineups.
+
+        Exposure percentage represents the percentage of generated
+        lineups containing the player.
+        """
+
+        if not lineups:
+            return pd.DataFrame(
+                columns=[
+                    "player_id",
+                    "name",
+                    "position",
+                    "team",
+                    "salary",
+                    "projection",
+                    "lineup_count",
+                    "exposure",
+                ]
+            )
+
+        required_columns = {
+            "player_id",
+            "name",
+            "position",
+            "team",
+            "salary",
+            "projection",
+        }
+
+        portfolio_records: list[dict] = []
+
+        for lineup_number, lineup in enumerate(
+            lineups,
+            start=1,
+        ):
+            missing_columns = (
+                required_columns
+                - set(lineup.columns)
+            )
+
+            if missing_columns:
+                raise ValueError(
+                    "Cannot calculate exposure. A lineup is "
+                    "missing required columns: "
+                    f"{sorted(missing_columns)}"
+                )
+
+            unique_lineup_players = (
+                lineup.drop_duplicates(
+                    subset=["player_id"]
+                )
+            )
+
+            for _, player in unique_lineup_players.iterrows():
+                portfolio_records.append(
+                    {
+                        "lineup_number": lineup_number,
+                        "player_id": str(
+                            player["player_id"]
+                        ),
+                        "name": str(
+                            player["name"]
+                        ),
+                        "position": str(
+                            player["position"]
+                        ),
+                        "team": str(
+                            player["team"]
+                        ),
+                        "salary": int(
+                            player["salary"]
+                        ),
+                        "projection": float(
+                            player["projection"]
+                        ),
+                    }
+                )
+
+        portfolio = pd.DataFrame(
+            portfolio_records
+        )
+
+        total_lineups = len(lineups)
+
+        exposure_report = (
+            portfolio.groupby(
+                [
+                    "player_id",
+                    "name",
+                    "position",
+                    "team",
+                    "salary",
+                    "projection",
+                ],
+                as_index=False,
+            )
+            .agg(
+                lineup_count=(
+                    "lineup_number",
+                    "nunique",
+                )
+            )
+        )
+
+        exposure_report["exposure"] = (
+            exposure_report["lineup_count"]
+            / total_lineups
+        )
+
+        position_order = {
+            "QB": 1,
+            "RB": 2,
+            "WR": 3,
+            "TE": 4,
+            "DST": 5,
+        }
+
+        exposure_report["_position_order"] = (
+            exposure_report["position"]
+            .map(position_order)
+            .fillna(99)
+        )
+
+        exposure_report = (
+            exposure_report.sort_values(
+                by=[
+                    "exposure",
+                    "projection",
+                    "_position_order",
+                    "name",
+                ],
+                ascending=[
+                    False,
+                    False,
+                    True,
+                    True,
+                ],
+            )
+            .drop(
+                columns=["_position_order"]
+            )
+            .reset_index(drop=True)
+        )
+
+        return exposure_report

@@ -22,7 +22,7 @@ optimizer_service = OptimizerService()
 
 st.title("⚙️ Lineup Optimizer")
 st.caption(
-    "Generate multiple unique DraftKings NFL Classic lineups"
+    "Generate and analyze multiple unique DraftKings NFL Classic lineups"
 )
 
 if "player_pool" not in st.session_state:
@@ -225,10 +225,14 @@ if generate_clicked:
             )
         )
 
-        st.session_state.generated_lineups = [
+        generated_lineups = [
             result.lineup.copy()
             for result in results
         ]
+
+        st.session_state.generated_lineups = (
+            generated_lineups
+        )
 
         st.session_state.generated_lineup_metadata = [
             {
@@ -242,6 +246,27 @@ if generate_clicked:
             }
             for result in results
         ]
+
+        st.session_state.generated_exposure_report = (
+            optimizer_service.build_exposure_report(
+                generated_lineups
+            )
+        )
+
+        st.session_state.generated_lineup_settings = {
+            "salary_cap": int(
+                optimizer_settings.salary_cap
+            ),
+            "minimum_salary": int(
+                optimizer_settings.minimum_salary
+            ),
+            "lineup_count": int(
+                optimizer_settings.lineup_count
+            ),
+            "minimum_unique_players": int(
+                optimizer_settings.minimum_unique_players
+            ),
+        }
 
         st.session_state.saved_generated_lineups = {}
 
@@ -264,14 +289,40 @@ generated_metadata = (
     st.session_state.generated_lineup_metadata
 )
 
+generated_settings = (
+    st.session_state.get(
+        "generated_lineup_settings",
+        {
+            "salary_cap": int(salary_cap),
+            "minimum_salary": int(
+                minimum_salary
+            ),
+            "lineup_count": len(
+                generated_lineups
+            ),
+            "minimum_unique_players": int(
+                minimum_unique_players
+            ),
+        },
+    )
+)
+
+generated_salary_cap = int(
+    generated_settings["salary_cap"]
+)
+
+requested_lineup_count = int(
+    generated_settings["lineup_count"]
+)
+
 generated_count = len(
     generated_lineups
 )
 
-if generated_count < int(lineup_count):
+if generated_count < requested_lineup_count:
     st.warning(
         f"The optimizer generated {generated_count} of the "
-        f"{int(lineup_count)} requested lineups. The player pool "
+        f"{requested_lineup_count} requested lineups. The player pool "
         "could not support more lineups under the current uniqueness, "
         "lock, exclusion, and salary rules."
     )
@@ -293,8 +344,10 @@ for lineup_index, metadata in enumerate(
                 metadata["total_salary"]
             ),
             "salary_remaining": (
-                int(salary_cap)
-                - int(metadata["total_salary"])
+                generated_salary_cap
+                - int(
+                    metadata["total_salary"]
+                )
             ),
             "total_projection": float(
                 metadata["total_projection"]
@@ -337,6 +390,194 @@ st.dataframe(
         ),
     },
 )
+
+st.markdown("---")
+st.subheader("Portfolio exposure")
+
+exposure_report = (
+    st.session_state.get(
+        "generated_exposure_report"
+    )
+)
+
+if exposure_report is None:
+    exposure_report = (
+        optimizer_service.build_exposure_report(
+            generated_lineups
+        )
+    )
+
+    st.session_state.generated_exposure_report = (
+        exposure_report
+    )
+
+if exposure_report.empty:
+    st.info(
+        "No exposure data is available."
+    )
+else:
+    exposure_metric_1, exposure_metric_2, exposure_metric_3 = (
+        st.columns(3)
+    )
+
+    highest_exposure = float(
+        exposure_report["exposure"].max()
+    )
+
+    full_exposure_count = int(
+        (
+            exposure_report["exposure"]
+            == 1.0
+        ).sum()
+    )
+
+    unique_players_used = int(
+        len(exposure_report)
+    )
+
+    exposure_metric_1.metric(
+        "Players used",
+        unique_players_used,
+    )
+
+    exposure_metric_2.metric(
+        "100% exposed players",
+        full_exposure_count,
+    )
+
+    exposure_metric_3.metric(
+        "Highest exposure",
+        f"{highest_exposure:.0%}",
+    )
+
+    position_options = [
+        "All",
+        "QB",
+        "RB",
+        "WR",
+        "TE",
+        "DST",
+    ]
+
+    selected_position = st.selectbox(
+        "Filter exposure by position",
+        options=position_options,
+    )
+
+    minimum_exposure_percentage = st.slider(
+        "Minimum displayed exposure",
+        min_value=0,
+        max_value=100,
+        value=0,
+        step=5,
+    )
+
+    filtered_exposure = (
+        exposure_report.copy()
+    )
+
+    if selected_position != "All":
+        filtered_exposure = (
+            filtered_exposure.loc[
+                filtered_exposure["position"]
+                == selected_position
+            ]
+        )
+
+    filtered_exposure = (
+        filtered_exposure.loc[
+            filtered_exposure["exposure"]
+            >= (
+                minimum_exposure_percentage
+                / 100
+            )
+        ]
+        .reset_index(drop=True)
+    )
+
+    if filtered_exposure.empty:
+        st.info(
+            "No players match the current exposure filters."
+        )
+    else:
+        st.dataframe(
+            filtered_exposure[
+                [
+                    "name",
+                    "position",
+                    "team",
+                    "salary",
+                    "projection",
+                    "lineup_count",
+                    "exposure",
+                ]
+            ],
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "name": st.column_config.TextColumn(
+                    "Player",
+                ),
+                "position": st.column_config.TextColumn(
+                    "Position",
+                ),
+                "team": st.column_config.TextColumn(
+                    "Team",
+                ),
+                "salary": st.column_config.NumberColumn(
+                    "Salary",
+                    format="$%d",
+                ),
+                "projection": st.column_config.NumberColumn(
+                    "Projection",
+                    format="%.2f",
+                ),
+                "lineup_count": st.column_config.NumberColumn(
+                    "Lineups",
+                    format="%d",
+                ),
+                "exposure": st.column_config.ProgressColumn(
+                    "Exposure",
+                    min_value=0.0,
+                    max_value=1.0,
+                    format="percent",
+                ),
+            },
+        )
+
+    exposure_export = (
+        exposure_report.copy()
+    )
+
+    exposure_export["exposure_percentage"] = (
+        exposure_export["exposure"]
+        * 100
+    )
+
+    exposure_export = exposure_export[
+        [
+            "player_id",
+            "name",
+            "position",
+            "team",
+            "salary",
+            "projection",
+            "lineup_count",
+            "exposure_percentage",
+        ]
+    ]
+
+    st.download_button(
+        "Download exposure report CSV",
+        data=exposure_export.to_csv(
+            index=False
+        ).encode("utf-8"),
+        file_name="lineup_exposure_report.csv",
+        mime="text/csv",
+    )
+
+st.markdown("---")
+st.subheader("Lineup review")
 
 selected_lineup_number = st.selectbox(
     "Select a lineup to review",
@@ -399,7 +640,7 @@ metric_column_2.metric(
 
 metric_column_3.metric(
     "Salary remaining",
-    f"${int(salary_cap) - total_salary:,}",
+    f"${generated_salary_cap - total_salary:,}",
 )
 
 st.dataframe(
@@ -495,11 +736,11 @@ if save_lineup_clicked:
             total_salary=total_salary,
             total_projection=total_projection,
             solver_status=status,
-            salary_cap=(
-                optimizer_settings.salary_cap
-            ),
-            minimum_salary=(
-                optimizer_settings.minimum_salary
+            salary_cap=generated_salary_cap,
+            minimum_salary=int(
+                generated_settings[
+                    "minimum_salary"
+                ]
             ),
         )
 
