@@ -8,6 +8,7 @@ from ortools.sat.python import cp_model
 
 from config import ROSTER_SLOTS, SALARY_CAP
 from optimizer.constraints import (
+    add_player_availability_constraints,
     add_position_constraints,
     add_salary_constraints,
 )
@@ -170,44 +171,14 @@ def _solve_lineup(
         )
     )
 
-    for player_index in pool.index:
-        player_id = str(
-            pool.at[
-                player_index,
-                "player_id",
-            ]
-        )
-
-        if bool(
-            pool.at[
-                player_index,
-                "locked",
-            ]
-        ):
-            model.Add(
-                selected_player[player_index]
-                == 1
-            )
-
-        if bool(
-            pool.at[
-                player_index,
-                "excluded",
-            ]
-        ):
-            model.Add(
-                selected_player[player_index]
-                == 0
-            )
-
-        if (
-            player_id
-            in unavailable_player_ids
-        ):
-            model.Add(
-                selected_player[player_index]
-                == 0
-            )
+    add_player_availability_constraints(
+        model=model,
+        pool=pool,
+        selected_player=selected_player,
+        unavailable_player_ids=(
+            unavailable_player_ids
+        ),
+    )
 
     add_salary_constraints(
         model=model,

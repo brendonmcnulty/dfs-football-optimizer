@@ -241,8 +241,6 @@ edited_exposure_table = st.data_editor(
         "team",
         "salary",
         "projection",
-        "locked",
-        "excluded",
     ],
     column_config={
         "player_id": None,
@@ -286,9 +284,27 @@ edited_exposure_table = st.data_editor(
     key="maximum_exposure_editor",
 )
 
+players["locked"] = (
+    edited_exposure_table["locked"]
+    .fillna(False)
+    .astype(bool)
+)
+
+players["excluded"] = (
+    edited_exposure_table["excluded"]
+    .fillna(False)
+    .astype(bool)
+)
+
+st.session_state.player_pool = (
+    players.copy()
+)
+
 player_max_exposures = {
-    str(row["player_id"]): float(
-        row["maximum_exposure"]
+    str(row["player_id"]): (
+        1.0
+        if bool(row["locked"])
+        else float(row["maximum_exposure"])
     )
     for _, row in (
         edited_exposure_table.iterrows()
