@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import pandas as pd
@@ -119,6 +120,32 @@ def _prepare_players(players: pd.DataFrame) -> pd.DataFrame:
     return pool
 
 
+def _calculate_maximum_appearances(
+    lineup_count: int,
+    exposure: float,
+) -> int:
+    """
+    Convert an exposure percentage to a maximum lineup count.
+
+    Ceiling is used because small portfolios cannot always represent the
+    requested percentage exactly. For example, 20% of three lineups
+    permits one appearance.
+    """
+
+    if exposure <= 0:
+        return 0
+
+    return min(
+        lineup_count,
+        max(
+            1,
+            math.ceil(
+                lineup_count * exposure - 1e-9
+            ),
+        ),
+    )
+
+
 def _solve_lineup(
     pool: pd.DataFrame,
     salary_cap: int,
@@ -126,8 +153,14 @@ def _solve_lineup(
     solver_timeout_seconds: float,
     previous_player_sets: list[set[str]],
     maximum_overlap: int,
+    unavailable_player_ids: set[str],
 ) -> OptimizationResult:
-    """Solve one lineup while respecting prior-lineup overlap limits."""
+    """
+    Solve one lineup.
+
+    Players whose maximum exposure has already been reached are treated
+    as unavailable for this lineup.
+    """
 
     model = cp_model.CpModel()
 
@@ -196,6 +229,10 @@ def _solve_lineup(
         )
 
     for player_index in pool.index:
+        player_id = str(
+            pool.at[player_index, "player_id"]
+        )
+
         player_variables = [
             variable
             for (
@@ -216,6 +253,11 @@ def _solve_lineup(
             )
 
         if bool(pool.at[player_index, "excluded"]):
+            model.Add(
+                selected_player[player_index] == 0
+            )
+
+        if player_id in unavailable_player_ids:
             model.Add(
                 selected_player[player_index] == 0
             )
@@ -340,12 +382,14 @@ def optimize_lineups(
     salary_cap: int = SALARY_CAP,
     minimum_salary: int = 0,
     solver_timeout_seconds: float = 15.0,
+    player_max_exposures: dict[str, float] | None = None,
 ) -> list[OptimizationResult]:
     """
-    Generate multiple lineups with a minimum uniqueness requirement.
+    Generate multiple lineups with uniqueness and exposure requirements.
 
-    Each lineup must differ from every previously generated lineup by at
-    least `minimum_unique_players`.
+    `player_max_exposures` maps player IDs to values from 0.0 through
+    1.0. A value of 0.40 means the player may appear in at most 40% of
+    the requested lineup portfolio, subject to whole-lineup rounding.
     """
 
     if lineup_count < 1:
@@ -370,6 +414,35 @@ def optimize_lineups(
 
     pool = _prepare_players(players)
 
+    normalized_exposures = {
+        str(player_id): float(exposure)
+        for player_id, exposure in (
+            player_max_exposures or {}
+        ).items()
+    }
+
+    for player_id, exposure in normalized_exposures.items():
+        if exposure < 0 or exposure > 1:
+            raise ValueError(
+                "Player maximum exposures must be between "
+                f"0% and 100%. Invalid player ID: {player_id}"
+            )
+
+    maximum_appearances: dict[str, int] = {}
+
+    for player_id in pool["player_id"].astype(str):
+        exposure = normalized_exposures.get(
+            player_id,
+            1.0,
+        )
+
+        maximum_appearances[player_id] = (
+            _calculate_maximum_appearances(
+                lineup_count=lineup_count,
+                exposure=exposure,
+            )
+        )
+
     maximum_overlap = (
         9 - int(minimum_unique_players)
     )
@@ -382,7 +455,22 @@ def optimize_lineups(
         set[str]
     ] = []
 
+    player_appearance_counts = {
+        player_id: 0
+        for player_id in pool[
+            "player_id"
+        ].astype(str)
+    }
+
     for lineup_number in range(lineup_count):
+        unavailable_player_ids = {
+            player_id
+            for player_id, appearance_count
+            in player_appearance_counts.items()
+            if appearance_count
+            >= maximum_appearances[player_id]
+        }
+
         result = _solve_lineup(
             pool=pool,
             salary_cap=int(salary_cap),
@@ -392,6 +480,9 @@ def optimize_lineups(
             ),
             previous_player_sets=previous_player_sets,
             maximum_overlap=maximum_overlap,
+            unavailable_player_ids=(
+                unavailable_player_ids
+            ),
         )
 
         if result.lineup.empty:
@@ -399,13 +490,20 @@ def optimize_lineups(
 
         generated_results.append(result)
 
-        previous_player_sets.append(
-            set(
-                result.lineup[
-                    "player_id"
-                ].astype(str)
-            )
+        selected_player_ids = set(
+            result.lineup[
+                "player_id"
+            ].astype(str)
         )
+
+        previous_player_sets.append(
+            selected_player_ids
+        )
+
+        for player_id in selected_player_ids:
+            player_appearance_counts[
+                player_id
+            ] += 1
 
     return generated_results
 
@@ -416,11 +514,7 @@ def optimize_lineup(
     minimum_salary: int = 0,
     solver_timeout_seconds: float = 15.0,
 ) -> OptimizationResult:
-    """
-    Generate one optimized lineup.
-
-    This wrapper preserves compatibility with existing application code.
-    """
+    """Generate one optimized lineup."""
 
     results = optimize_lineups(
         players=players,

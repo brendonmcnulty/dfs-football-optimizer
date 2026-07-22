@@ -22,7 +22,8 @@ optimizer_service = OptimizerService()
 
 st.title("⚙️ Lineup Optimizer")
 st.caption(
-    "Generate and analyze multiple unique DraftKings NFL Classic lineups"
+    "Generate unique DraftKings NFL Classic lineups "
+    "with player exposure controls"
 )
 
 if "player_pool" not in st.session_state:
@@ -192,23 +193,146 @@ with st.expander(
         ],
         width="stretch",
         hide_index=True,
-        column_config={
-            "salary": st.column_config.NumberColumn(
-                "Salary",
-                format="$%d",
-            ),
-            "projection": st.column_config.NumberColumn(
-                "Projection",
-                format="%.2f",
-            ),
-            "locked": st.column_config.CheckboxColumn(
-                "Locked",
-            ),
-            "excluded": st.column_config.CheckboxColumn(
-                "Excluded",
-            ),
-        },
     )
+
+st.markdown("---")
+st.subheader("Maximum player exposure")
+
+st.caption(
+    "Set the maximum percentage of generated lineups in which each "
+    "player may appear. Locked players must remain at 100%."
+)
+
+default_exposure_table = players[
+    [
+        "player_id",
+        "name",
+        "position",
+        "team",
+        "salary",
+        "projection",
+        "locked",
+        "excluded",
+    ]
+].copy()
+
+saved_exposures = st.session_state.get(
+    "player_max_exposures",
+    {},
+)
+
+default_exposure_table[
+    "maximum_exposure"
+] = (
+    default_exposure_table["player_id"]
+    .astype(str)
+    .map(saved_exposures)
+    .fillna(1.0)
+)
+
+edited_exposure_table = st.data_editor(
+    default_exposure_table,
+    width="stretch",
+    hide_index=True,
+    disabled=[
+        "player_id",
+        "name",
+        "position",
+        "team",
+        "salary",
+        "projection",
+        "locked",
+        "excluded",
+    ],
+    column_config={
+        "player_id": None,
+        "name": st.column_config.TextColumn(
+            "Player",
+        ),
+        "position": st.column_config.TextColumn(
+            "Position",
+        ),
+        "team": st.column_config.TextColumn(
+            "Team",
+        ),
+        "salary": st.column_config.NumberColumn(
+            "Salary",
+            format="$%d",
+        ),
+        "projection": st.column_config.NumberColumn(
+            "Projection",
+            format="%.2f",
+        ),
+        "locked": st.column_config.CheckboxColumn(
+            "Locked",
+        ),
+        "excluded": st.column_config.CheckboxColumn(
+            "Excluded",
+        ),
+        "maximum_exposure": (
+            st.column_config.NumberColumn(
+                "Maximum exposure",
+                min_value=0.0,
+                max_value=1.0,
+                step=0.05,
+                format="percent",
+                help=(
+                    "1.00 = 100%, 0.50 = 50%, "
+                    "0.25 = 25%"
+                ),
+            )
+        ),
+    },
+    key="maximum_exposure_editor",
+)
+
+player_max_exposures = {
+    str(row["player_id"]): float(
+        row["maximum_exposure"]
+    )
+    for _, row in (
+        edited_exposure_table.iterrows()
+    )
+}
+
+st.session_state.player_max_exposures = (
+    player_max_exposures
+)
+
+limited_player_count = sum(
+    exposure < 1.0
+    for exposure in (
+        player_max_exposures.values()
+    )
+)
+
+st.write(
+    f"**Players with exposure limits:** "
+    f"{limited_player_count}"
+)
+
+reset_exposures_clicked = st.button(
+    "Reset all maximum exposures to 100%"
+)
+
+if reset_exposures_clicked:
+    st.session_state.player_max_exposures = {
+        str(player_id): 1.0
+        for player_id in players[
+            "player_id"
+        ].astype(str)
+    }
+
+    if "maximum_exposure_editor" in (
+        st.session_state
+    ):
+        del st.session_state[
+            "maximum_exposure_editor"
+        ]
+
+    st.rerun()
+
+st.markdown("---")
 
 generate_clicked = st.button(
     "Generate lineups",
@@ -222,6 +346,9 @@ if generate_clicked:
             optimizer_service.generate_lineups(
                 players=players,
                 settings=optimizer_settings,
+                player_max_exposures=(
+                    player_max_exposures
+                ),
             )
         )
 
@@ -236,9 +363,7 @@ if generate_clicked:
 
         st.session_state.generated_lineup_metadata = [
             {
-                "total_salary": (
-                    result.total_salary
-                ),
+                "total_salary": result.total_salary,
                 "total_projection": (
                     result.total_projection
                 ),
@@ -247,9 +372,16 @@ if generate_clicked:
             for result in results
         ]
 
+        st.session_state.generated_exposure_rules = (
+            player_max_exposures.copy()
+        )
+
         st.session_state.generated_exposure_report = (
             optimizer_service.build_exposure_report(
-                generated_lineups
+                lineups=generated_lineups,
+                player_max_exposures=(
+                    player_max_exposures
+                ),
             )
         )
 
@@ -322,9 +454,9 @@ generated_count = len(
 if generated_count < requested_lineup_count:
     st.warning(
         f"The optimizer generated {generated_count} of the "
-        f"{requested_lineup_count} requested lineups. The player pool "
-        "could not support more lineups under the current uniqueness, "
-        "lock, exclusion, and salary rules."
+        f"{requested_lineup_count} requested lineups. The current "
+        "salary, uniqueness, lock, exclusion, or exposure rules "
+        "prevented additional valid lineups."
     )
 else:
     st.success(
@@ -369,21 +501,29 @@ st.dataframe(
     width="stretch",
     hide_index=True,
     column_config={
-        "lineup_number": st.column_config.NumberColumn(
-            "Lineup",
-            format="%d",
+        "lineup_number": (
+            st.column_config.NumberColumn(
+                "Lineup",
+                format="%d",
+            )
         ),
-        "total_salary": st.column_config.NumberColumn(
-            "Salary",
-            format="$%d",
+        "total_salary": (
+            st.column_config.NumberColumn(
+                "Salary",
+                format="$%d",
+            )
         ),
-        "salary_remaining": st.column_config.NumberColumn(
-            "Remaining",
-            format="$%d",
+        "salary_remaining": (
+            st.column_config.NumberColumn(
+                "Remaining",
+                format="$%d",
+            )
         ),
-        "total_projection": st.column_config.NumberColumn(
-            "Projection",
-            format="%.2f",
+        "total_projection": (
+            st.column_config.NumberColumn(
+                "Projection",
+                format="%.2f",
+            )
         ),
         "status": st.column_config.TextColumn(
             "Status",
@@ -394,21 +534,21 @@ st.dataframe(
 st.markdown("---")
 st.subheader("Portfolio exposure")
 
-exposure_report = (
-    st.session_state.get(
-        "generated_exposure_report"
-    )
+exposure_report = st.session_state.get(
+    "generated_exposure_report"
 )
 
 if exposure_report is None:
     exposure_report = (
         optimizer_service.build_exposure_report(
-            generated_lineups
+            lineups=generated_lineups,
+            player_max_exposures=(
+                st.session_state.get(
+                    "generated_exposure_rules",
+                    {},
+                )
+            ),
         )
-    )
-
-    st.session_state.generated_exposure_report = (
-        exposure_report
     )
 
 if exposure_report.empty:
@@ -420,48 +560,38 @@ else:
         st.columns(3)
     )
 
-    highest_exposure = float(
-        exposure_report["exposure"].max()
-    )
-
-    full_exposure_count = int(
-        (
-            exposure_report["exposure"]
-            == 1.0
-        ).sum()
-    )
-
-    unique_players_used = int(
-        len(exposure_report)
-    )
-
     exposure_metric_1.metric(
         "Players used",
-        unique_players_used,
+        len(exposure_report),
     )
 
     exposure_metric_2.metric(
         "100% exposed players",
-        full_exposure_count,
+        int(
+            (
+                exposure_report["exposure"]
+                == 1.0
+            ).sum()
+        ),
     )
 
     exposure_metric_3.metric(
         "Highest exposure",
-        f"{highest_exposure:.0%}",
+        (
+            f"{float(exposure_report['exposure'].max()):.0%}"
+        ),
     )
-
-    position_options = [
-        "All",
-        "QB",
-        "RB",
-        "WR",
-        "TE",
-        "DST",
-    ]
 
     selected_position = st.selectbox(
         "Filter exposure by position",
-        options=position_options,
+        options=[
+            "All",
+            "QB",
+            "RB",
+            "WR",
+            "TE",
+            "DST",
+        ],
     )
 
     minimum_exposure_percentage = st.slider(
@@ -495,77 +625,76 @@ else:
         .reset_index(drop=True)
     )
 
-    if filtered_exposure.empty:
-        st.info(
-            "No players match the current exposure filters."
-        )
-    else:
-        st.dataframe(
-            filtered_exposure[
-                [
-                    "name",
-                    "position",
-                    "team",
-                    "salary",
-                    "projection",
-                    "lineup_count",
-                    "exposure",
-                ]
-            ],
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "name": st.column_config.TextColumn(
-                    "Player",
-                ),
-                "position": st.column_config.TextColumn(
-                    "Position",
-                ),
-                "team": st.column_config.TextColumn(
-                    "Team",
-                ),
-                "salary": st.column_config.NumberColumn(
+    st.dataframe(
+        filtered_exposure[
+            [
+                "name",
+                "position",
+                "team",
+                "salary",
+                "projection",
+                "lineup_count",
+                "exposure",
+                "maximum_exposure",
+            ]
+        ],
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "name": st.column_config.TextColumn(
+                "Player",
+            ),
+            "salary": (
+                st.column_config.NumberColumn(
                     "Salary",
                     format="$%d",
-                ),
-                "projection": st.column_config.NumberColumn(
+                )
+            ),
+            "projection": (
+                st.column_config.NumberColumn(
                     "Projection",
                     format="%.2f",
-                ),
-                "lineup_count": st.column_config.NumberColumn(
+                )
+            ),
+            "lineup_count": (
+                st.column_config.NumberColumn(
                     "Lineups",
                     format="%d",
-                ),
-                "exposure": st.column_config.ProgressColumn(
-                    "Exposure",
+                )
+            ),
+            "exposure": (
+                st.column_config.ProgressColumn(
+                    "Actual exposure",
                     min_value=0.0,
                     max_value=1.0,
                     format="percent",
-                ),
-            },
-        )
+                )
+            ),
+            "maximum_exposure": (
+                st.column_config.ProgressColumn(
+                    "Maximum exposure",
+                    min_value=0.0,
+                    max_value=1.0,
+                    format="percent",
+                )
+            ),
+        },
+    )
 
     exposure_export = (
         exposure_report.copy()
     )
 
     exposure_export["exposure_percentage"] = (
-        exposure_export["exposure"]
-        * 100
+        exposure_export["exposure"] * 100
     )
 
-    exposure_export = exposure_export[
-        [
-            "player_id",
-            "name",
-            "position",
-            "team",
-            "salary",
-            "projection",
-            "lineup_count",
-            "exposure_percentage",
-        ]
-    ]
+    exposure_export[
+        "maximum_exposure_percentage"
+    ] = (
+        exposure_export["maximum_exposure"]
+        * 100
+    )
 
     st.download_button(
         "Download exposure report CSV",
@@ -620,10 +749,6 @@ status = str(
     selected_metadata["status"]
 )
 
-st.subheader(
-    f"Lineup {selected_lineup_number}"
-)
-
 metric_column_1, metric_column_2, metric_column_3 = (
     st.columns(3)
 )
@@ -657,31 +782,6 @@ st.dataframe(
     ],
     width="stretch",
     hide_index=True,
-    column_config={
-        "roster_slot": st.column_config.TextColumn(
-            "Roster slot",
-        ),
-        "name": st.column_config.TextColumn(
-            "Player",
-        ),
-        "position": st.column_config.TextColumn(
-            "Position",
-        ),
-        "team": st.column_config.TextColumn(
-            "Team",
-        ),
-        "opponent": st.column_config.TextColumn(
-            "Opponent",
-        ),
-        "salary": st.column_config.NumberColumn(
-            "Salary",
-            format="$%d",
-        ),
-        "projection": st.column_config.NumberColumn(
-            "Projection",
-            format="%.2f",
-        ),
-    },
 )
 
 st.markdown("---")

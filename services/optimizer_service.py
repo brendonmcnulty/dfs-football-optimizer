@@ -11,11 +11,7 @@ from optimizer.lineup_optimizer import (
 
 class OptimizerService:
     """
-    Coordinate player-pool validation, lineup optimization,
-    and generated-portfolio analysis.
-
-    Streamlit pages should use this service rather than calling the
-    OR-Tools optimizer directly.
+    Coordinate validation, optimization, and portfolio analysis.
     """
 
     REQUIRED_COLUMNS = {
@@ -190,10 +186,9 @@ class OptimizerService:
             "DST": 1,
         }
 
-        for (
-            position,
-            minimum_count,
-        ) in required_position_counts.items():
+        for position, minimum_count in (
+            required_position_counts.items()
+        ):
             available_count = int(
                 (
                     available_positions
@@ -252,10 +247,9 @@ class OptimizerService:
             "DST": 1,
         }
 
-        for (
-            position,
-            maximum_count,
-        ) in locked_position_limits.items():
+        for position, maximum_count in (
+            locked_position_limits.items()
+        ):
             position_count = int(
                 (
                     locked_positions
@@ -345,17 +339,93 @@ class OptimizerService:
 
         return prepared
 
+    def validate_player_max_exposures(
+        self,
+        players: pd.DataFrame,
+        player_max_exposures: dict[str, float],
+    ) -> dict[str, float]:
+        """Validate and normalize player maximum-exposure rules."""
+
+        valid_player_ids = set(
+            players["player_id"].astype(str)
+        )
+
+        normalized_exposures: dict[str, float] = {}
+
+        for player_id, exposure in (
+            player_max_exposures.items()
+        ):
+            normalized_player_id = str(player_id)
+            normalized_exposure = float(exposure)
+
+            if normalized_player_id not in valid_player_ids:
+                raise ValueError(
+                    "Maximum exposure was provided for an "
+                    f"unknown player ID: {normalized_player_id}"
+                )
+
+            if (
+                normalized_exposure < 0
+                or normalized_exposure > 1
+            ):
+                raise ValueError(
+                    "Maximum player exposure must be between "
+                    "0% and 100%."
+                )
+
+            normalized_exposures[
+                normalized_player_id
+            ] = normalized_exposure
+
+        locked_players = players.loc[
+            players["locked"]
+            .fillna(False)
+            .astype(bool)
+        ]
+
+        for _, player in locked_players.iterrows():
+            player_id = str(
+                player["player_id"]
+            )
+
+            maximum_exposure = (
+                normalized_exposures.get(
+                    player_id,
+                    1.0,
+                )
+            )
+
+            if maximum_exposure < 1.0:
+                raise ValueError(
+                    f"{player['name']} is locked, so their "
+                    "maximum exposure must be 100%."
+                )
+
+        return normalized_exposures
+
     def generate_lineups(
         self,
         players: pd.DataFrame,
         settings: OptimizerSettings,
+        player_max_exposures: (
+            dict[str, float] | None
+        ) = None,
     ) -> list[OptimizationResult]:
-        """Validate inputs and generate multiple unique lineups."""
+        """Generate multiple unique, exposure-controlled lineups."""
 
         settings.validate()
 
         prepared_players = (
             self.prepare_player_pool(players)
+        )
+
+        normalized_exposures = (
+            self.validate_player_max_exposures(
+                players=prepared_players,
+                player_max_exposures=(
+                    player_max_exposures or {}
+                ),
+            )
         )
 
         results = optimize_lineups(
@@ -369,11 +439,16 @@ class OptimizerService:
             solver_timeout_seconds=(
                 settings.solver_timeout_seconds
             ),
+            player_max_exposures=(
+                normalized_exposures
+            ),
         )
 
         if not results:
             raise ValueError(
-                "The optimizer could not create a valid lineup."
+                "The optimizer could not create a valid lineup. "
+                "Review salary, locks, exclusions, uniqueness, "
+                "and maximum-exposure settings."
             )
 
         return results
@@ -403,26 +478,27 @@ class OptimizerService:
     def build_exposure_report(
         self,
         lineups: list[pd.DataFrame],
+        player_max_exposures: (
+            dict[str, float] | None
+        ) = None,
     ) -> pd.DataFrame:
-        """
-        Calculate player exposure across a group of generated lineups.
+        """Calculate actual and configured exposure."""
 
-        Exposure percentage represents the percentage of generated
-        lineups containing the player.
-        """
+        columns = [
+            "player_id",
+            "name",
+            "position",
+            "team",
+            "salary",
+            "projection",
+            "lineup_count",
+            "exposure",
+            "maximum_exposure",
+        ]
 
         if not lineups:
             return pd.DataFrame(
-                columns=[
-                    "player_id",
-                    "name",
-                    "position",
-                    "team",
-                    "salary",
-                    "projection",
-                    "lineup_count",
-                    "exposure",
-                ]
+                columns=columns
             )
 
         required_columns = {
@@ -458,7 +534,9 @@ class OptimizerService:
                 )
             )
 
-            for _, player in unique_lineup_players.iterrows():
+            for _, player in (
+                unique_lineup_players.iterrows()
+            ):
                 portfolio_records.append(
                     {
                         "lineup_number": lineup_number,
@@ -514,6 +592,19 @@ class OptimizerService:
             / total_lineups
         )
 
+        maximum_exposure_map = {
+            str(player_id): float(exposure)
+            for player_id, exposure in (
+                player_max_exposures or {}
+            ).items()
+        }
+
+        exposure_report["maximum_exposure"] = (
+            exposure_report["player_id"]
+            .map(maximum_exposure_map)
+            .fillna(1.0)
+        )
+
         position_order = {
             "QB": 1,
             "RB": 2,
@@ -528,7 +619,7 @@ class OptimizerService:
             .fillna(99)
         )
 
-        exposure_report = (
+        return (
             exposure_report.sort_values(
                 by=[
                     "exposure",
@@ -548,5 +639,3 @@ class OptimizerService:
             )
             .reset_index(drop=True)
         )
-
-        return exposure_report
