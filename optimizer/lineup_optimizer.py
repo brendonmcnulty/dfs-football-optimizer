@@ -7,7 +7,10 @@ import pandas as pd
 from ortools.sat.python import cp_model
 
 from config import ROSTER_SLOTS, SALARY_CAP
-from optimizer.constraints import add_salary_constraints
+from optimizer.constraints import (
+    add_position_constraints,
+    add_salary_constraints,
+)
 
 
 @dataclass
@@ -18,33 +21,6 @@ class OptimizationResult:
     total_salary: int
     total_projection: float
     status: str
-
-
-def _eligible_slots(position: str) -> list[str]:
-    """Return roster slots that a position may fill."""
-
-    normalized_position = position.upper().strip()
-
-    if normalized_position == "QB":
-        return ["QB"]
-
-    if normalized_position == "RB":
-        return ["RB1", "RB2", "FLEX"]
-
-    if normalized_position == "WR":
-        return ["WR1", "WR2", "WR3", "FLEX"]
-
-    if normalized_position == "TE":
-        return ["TE", "FLEX"]
-
-    if normalized_position in {
-        "DST",
-        "D/ST",
-        "DEF",
-    }:
-        return ["DST"]
-
-    return []
 
 
 def _prepare_players(
@@ -184,84 +160,15 @@ def _solve_lineup(
 
     model = cp_model.CpModel()
 
-    assignment: dict[
-        tuple[int, str],
-        cp_model.IntVar,
-    ] = {}
-
-    selected_player: dict[
-        int,
-        cp_model.IntVar,
-    ] = {}
-
-    for player_index, player in pool.iterrows():
-        player_id = str(
-            player["player_id"]
+    assignment, selected_player = (
+        add_position_constraints(
+            model=model,
+            pool=pool,
+            roster_slots=list(
+                ROSTER_SLOTS
+            ),
         )
-
-        selected_player[player_index] = (
-            model.NewBoolVar(
-                f"selected_{player_index}_{player_id}"
-            )
-        )
-
-        eligible_slots = _eligible_slots(
-            str(player["position"])
-        )
-
-        player_slot_variables: list[
-            cp_model.IntVar
-        ] = []
-
-        for roster_slot in eligible_slots:
-            slot_variable = model.NewBoolVar(
-                f"player_{player_index}_{roster_slot}"
-            )
-
-            assignment[
-                (
-                    player_index,
-                    roster_slot,
-                )
-            ] = slot_variable
-
-            player_slot_variables.append(
-                slot_variable
-            )
-
-        if player_slot_variables:
-            model.Add(
-                selected_player[player_index]
-                == sum(
-                    player_slot_variables
-                )
-            )
-        else:
-            model.Add(
-                selected_player[player_index]
-                == 0
-            )
-
-    for roster_slot in ROSTER_SLOTS:
-        roster_slot_variables = [
-            variable
-            for (
-                player_index,
-                assigned_slot,
-            ), variable in assignment.items()
-            if assigned_slot == roster_slot
-        ]
-
-        if not roster_slot_variables:
-            raise ValueError(
-                "No eligible players are available for the "
-                f"{roster_slot} roster slot."
-            )
-
-        model.Add(
-            sum(roster_slot_variables)
-            == 1
-        )
+    )
 
     for player_index in pool.index:
         player_id = str(
@@ -270,22 +177,6 @@ def _solve_lineup(
                 "player_id",
             ]
         )
-
-        player_variables = [
-            variable
-            for (
-                assigned_player_index,
-                roster_slot,
-            ), variable in assignment.items()
-            if assigned_player_index
-            == player_index
-        ]
-
-        if player_variables:
-            model.Add(
-                sum(player_variables)
-                <= 1
-            )
 
         if bool(
             pool.at[
@@ -322,7 +213,9 @@ def _solve_lineup(
         model=model,
         pool=pool,
         selected_player=selected_player,
-        salary_cap=int(salary_cap),
+        salary_cap=int(
+            salary_cap
+        ),
         minimum_salary=int(
             minimum_salary
         ),
@@ -377,7 +270,10 @@ def _solve_lineup(
         )
     )
 
-    status_code = solver.Solve(model)
+    status_code = solver.Solve(
+        model
+    )
+
     status_name = solver.StatusName(
         status_code
     )
@@ -569,7 +465,9 @@ def optimize_lineups(
         )
     }
 
-    for _ in range(lineup_count):
+    for _ in range(
+        lineup_count
+    ):
         unavailable_player_ids = {
             player_id
             for (
