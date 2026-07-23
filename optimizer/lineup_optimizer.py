@@ -8,6 +8,7 @@ from ortools.sat.python import cp_model
 
 from config import ROSTER_SLOTS, SALARY_CAP
 from optimizer.constraints import (
+    add_lineup_uniqueness_constraints,
     add_player_availability_constraints,
     add_position_constraints,
     add_salary_constraints,
@@ -103,10 +104,14 @@ def _prepare_players(
     )
 
     if conflicting_mask.any():
-        conflicting_names = pool.loc[
-            conflicting_mask,
-            "name",
-        ].astype(str).tolist()
+        conflicting_names = (
+            pool.loc[
+                conflicting_mask,
+                "name",
+            ]
+            .astype(str)
+            .tolist()
+        )
 
         raise ValueError(
             "A player cannot be both locked and excluded: "
@@ -192,26 +197,17 @@ def _solve_lineup(
         ),
     )
 
-    for previous_player_ids in (
-        previous_player_sets
-    ):
-        overlap_variables = [
-            selected_player[player_index]
-            for player_index in pool.index
-            if str(
-                pool.at[
-                    player_index,
-                    "player_id",
-                ]
-            )
-            in previous_player_ids
-        ]
-
-        if overlap_variables:
-            model.Add(
-                sum(overlap_variables)
-                <= int(maximum_overlap)
-            )
+    add_lineup_uniqueness_constraints(
+        model=model,
+        pool=pool,
+        selected_player=selected_player,
+        previous_player_sets=(
+            previous_player_sets
+        ),
+        maximum_overlap=int(
+            maximum_overlap
+        ),
+    )
 
     projection_expression = sum(
         int(
@@ -268,7 +264,9 @@ def _solve_lineup(
     ), variable in assignment.items():
         if solver.Value(variable) == 1:
             player_record = (
-                pool.loc[player_index]
+                pool.loc[
+                    player_index
+                ]
                 .to_dict()
             )
 
@@ -355,9 +353,14 @@ def optimize_lineups(
             "Minimum unique players must be at least one."
         )
 
-    if minimum_unique_players > 9:
+    roster_size = len(
+        ROSTER_SLOTS
+    )
+
+    if minimum_unique_players > roster_size:
         raise ValueError(
-            "Minimum unique players cannot exceed nine."
+            "Minimum unique players cannot exceed "
+            f"{roster_size}."
         )
 
     pool = _prepare_players(
@@ -378,10 +381,7 @@ def optimize_lineups(
         player_id,
         exposure,
     ) in normalized_exposures.items():
-        if (
-            exposure < 0
-            or exposure > 1
-        ):
+        if exposure < 0 or exposure > 1:
             raise ValueError(
                 "Player maximum exposures must be between "
                 "0% and 100%. Invalid player ID: "
@@ -414,7 +414,7 @@ def optimize_lineups(
         )
 
     maximum_overlap = (
-        9
+        roster_size
         - int(
             minimum_unique_players
         )
