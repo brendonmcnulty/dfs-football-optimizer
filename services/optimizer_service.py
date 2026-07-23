@@ -10,9 +10,7 @@ from optimizer.lineup_optimizer import (
 
 
 class OptimizerService:
-    """
-    Coordinate validation, optimization, and portfolio analysis.
-    """
+    """Coordinate validation, optimization, and portfolio analysis."""
 
     REQUIRED_COLUMNS = {
         "player_id",
@@ -442,13 +440,19 @@ class OptimizerService:
             player_max_exposures=(
                 normalized_exposures
             ),
+            qb_stack_size=(
+                settings.qb_stack_size
+            ),
+            require_bring_back=(
+                settings.require_bring_back
+            ),
         )
 
         if not results:
             raise ValueError(
                 "The optimizer could not create a valid lineup. "
                 "Review salary, locks, exclusions, uniqueness, "
-                "and maximum-exposure settings."
+                "maximum-exposure, QB-stack, and bring-back settings."
             )
 
         return results
@@ -468,6 +472,10 @@ class OptimizerService:
             ),
             lineup_count=1,
             minimum_unique_players=1,
+            qb_stack_size=settings.qb_stack_size,
+            require_bring_back=(
+                settings.require_bring_back
+            ),
         )
 
         return self.generate_lineups(

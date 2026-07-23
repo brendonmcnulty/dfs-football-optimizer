@@ -116,6 +116,36 @@ with st.sidebar:
         ),
     )
 
+    qb_stack_size = st.selectbox(
+        "QB stacking",
+        options=[
+            0,
+            1,
+            2,
+        ],
+        index=[
+            0,
+            1,
+            2,
+        ].index(
+            int(
+                st.session_state.get(
+                    "qb_stack_size",
+                    0,
+                )
+            )
+        ),
+        format_func=lambda stack_size: (
+            "Off"
+            if stack_size == 0
+            else f"QB +{stack_size}"
+        ),
+        help=(
+            "Require the selected quarterback to be paired with "
+            "one or two same-team WR/TE pass catchers."
+        ),
+    )
+
     st.session_state.salary_cap = int(
         salary_cap
     )
@@ -132,12 +162,40 @@ with st.sidebar:
         minimum_unique_players
     )
 
+    st.session_state.qb_stack_size = int(
+        qb_stack_size
+    )
+
+    require_bring_back = st.checkbox(
+        "Require opponent bring-back",
+        value=bool(
+            st.session_state.get(
+                "require_bring_back",
+                False,
+            )
+        ),
+        help=(
+            "Require at least one opposing RB, WR, or TE "
+            "for the selected quarterback."
+        ),
+    )
+
+    st.session_state.require_bring_back = bool(
+        require_bring_back
+    )
+
 optimizer_settings = OptimizerSettings(
     salary_cap=int(salary_cap),
     minimum_salary=int(minimum_salary),
     lineup_count=int(lineup_count),
     minimum_unique_players=int(
         minimum_unique_players
+    ),
+    qb_stack_size=int(
+        qb_stack_size
+    ),
+    require_bring_back=bool(
+        require_bring_back
     ),
 )
 
@@ -414,6 +472,12 @@ if generate_clicked:
             "minimum_unique_players": int(
                 optimizer_settings.minimum_unique_players
             ),
+            "qb_stack_size": int(
+                optimizer_settings.qb_stack_size
+            ),
+            "require_bring_back": bool(
+                optimizer_settings.require_bring_back
+            ),
         }
 
         st.session_state.saved_generated_lineups = {}
@@ -451,6 +515,12 @@ generated_settings = (
             "minimum_unique_players": int(
                 minimum_unique_players
             ),
+            "qb_stack_size": int(
+                qb_stack_size
+            ),
+            "require_bring_back": bool(
+                require_bring_back
+            ),
         },
     )
 )
@@ -471,7 +541,7 @@ if generated_count < requested_lineup_count:
     st.warning(
         f"The optimizer generated {generated_count} of the "
         f"{requested_lineup_count} requested lineups. The current "
-        "salary, uniqueness, lock, exclusion, or exposure rules "
+        "salary, uniqueness, lock, exclusion, exposure, or stacking rules "
         "prevented additional valid lineups."
     )
 else:

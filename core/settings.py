@@ -14,15 +14,21 @@ class OptimizerSettings:
     solver_timeout_seconds: float = 15.0
     lineup_count: int = 1
     minimum_unique_players: int = 1
+    qb_stack_size: int = 0
+    require_bring_back: bool = False
 
     def validate(self) -> None:
         """Validate optimizer settings before they are used."""
 
         if self.salary_cap <= 0:
-            raise ValueError("Salary cap must be greater than zero.")
+            raise ValueError(
+                "Salary cap must be greater than zero."
+            )
 
         if self.minimum_salary < 0:
-            raise ValueError("Minimum salary cannot be negative.")
+            raise ValueError(
+                "Minimum salary cannot be negative."
+            )
 
         if self.minimum_salary > self.salary_cap:
             raise ValueError(
@@ -54,12 +60,21 @@ class OptimizerSettings:
                 "Minimum unique players cannot exceed nine."
             )
 
+        if self.qb_stack_size not in {0, 1, 2}:
+            raise ValueError(
+                "QB stack size must be 0, 1, or 2."
+            )
+
+        if not isinstance(
+            self.require_bring_back,
+            bool,
+        ):
+            raise ValueError(
+                "Require bring-back must be true or false."
+            )
+
     @property
     def maximum_overlap(self) -> int:
-        """
-        Return the maximum number of shared players between two lineups.
-
-        A DraftKings NFL Classic lineup contains nine players.
-        """
+        """Return the maximum shared players between two lineups."""
 
         return 9 - self.minimum_unique_players

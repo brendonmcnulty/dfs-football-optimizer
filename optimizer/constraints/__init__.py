@@ -1,5 +1,8 @@
 """OR-Tools constraints used by the DFS lineup optimizer."""
 
+from optimizer.constraints.bring_back import (
+    add_bring_back_constraints,
+)
 from optimizer.constraints.exposure import (
     build_maximum_appearances,
     calculate_maximum_appearances,
@@ -18,14 +21,19 @@ from optimizer.constraints.positions import (
 from optimizer.constraints.salary import (
     add_salary_constraints,
 )
+from optimizer.constraints.stacks import (
+    add_qb_stack_constraints,
+)
 from optimizer.constraints.uniqueness import (
     add_lineup_uniqueness_constraints,
 )
 
 __all__ = [
+    "add_bring_back_constraints",
     "add_lineup_uniqueness_constraints",
     "add_player_availability_constraints",
     "add_position_constraints",
+    "add_qb_stack_constraints",
     "add_salary_constraints",
     "build_maximum_appearances",
     "calculate_maximum_appearances",
