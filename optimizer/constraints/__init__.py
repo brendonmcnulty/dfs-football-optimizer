@@ -1,5 +1,13 @@
 """OR-Tools constraints used by the DFS lineup optimizer."""
 
+from optimizer.constraints.exposure import (
+    build_maximum_appearances,
+    calculate_maximum_appearances,
+    get_unavailable_player_ids,
+    initialize_player_appearance_counts,
+    normalize_player_exposures,
+    record_player_appearances,
+)
 from optimizer.constraints.locks import (
     add_player_availability_constraints,
 )
@@ -19,5 +27,11 @@ __all__ = [
     "add_player_availability_constraints",
     "add_position_constraints",
     "add_salary_constraints",
+    "build_maximum_appearances",
+    "calculate_maximum_appearances",
     "eligible_roster_slots",
+    "get_unavailable_player_ids",
+    "initialize_player_appearance_counts",
+    "normalize_player_exposures",
+    "record_player_appearances",
 ]

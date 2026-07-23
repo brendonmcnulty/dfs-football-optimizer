@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 import pandas as pd
@@ -12,6 +11,10 @@ from optimizer.constraints import (
     add_player_availability_constraints,
     add_position_constraints,
     add_salary_constraints,
+    build_maximum_appearances,
+    get_unavailable_player_ids,
+    initialize_player_appearance_counts,
+    record_player_appearances,
 )
 
 
@@ -115,37 +118,12 @@ def _prepare_players(
 
         raise ValueError(
             "A player cannot be both locked and excluded: "
-            + ", ".join(conflicting_names)
+            + ", ".join(
+                conflicting_names
+            )
         )
 
     return pool
-
-
-def _calculate_maximum_appearances(
-    lineup_count: int,
-    exposure: float,
-) -> int:
-    """
-    Convert an exposure percentage to a maximum lineup count.
-
-    Ceiling is used because small portfolios cannot always represent
-    the requested percentage exactly.
-    """
-
-    if exposure <= 0:
-        return 0
-
-    return min(
-        lineup_count,
-        max(
-            1,
-            math.ceil(
-                lineup_count
-                * exposure
-                - 1e-9
-            ),
-        ),
-    )
 
 
 def _solve_lineup(
@@ -221,7 +199,9 @@ def _solve_lineup(
                 * 100
             )
         )
-        * selected_player[player_index]
+        * selected_player[
+            player_index
+        ]
         for player_index in pool.index
     )
 
@@ -367,51 +347,17 @@ def optimize_lineups(
         players
     )
 
-    normalized_exposures = {
-        str(player_id): float(
-            exposure
+    maximum_appearances = (
+        build_maximum_appearances(
+            pool=pool,
+            lineup_count=int(
+                lineup_count
+            ),
+            player_max_exposures=(
+                player_max_exposures
+            ),
         )
-        for player_id, exposure in (
-            player_max_exposures
-            or {}
-        ).items()
-    }
-
-    for (
-        player_id,
-        exposure,
-    ) in normalized_exposures.items():
-        if exposure < 0 or exposure > 1:
-            raise ValueError(
-                "Player maximum exposures must be between "
-                "0% and 100%. Invalid player ID: "
-                f"{player_id}"
-            )
-
-    maximum_appearances: dict[
-        str,
-        int,
-    ] = {}
-
-    for player_id in (
-        pool["player_id"]
-        .astype(str)
-    ):
-        exposure = (
-            normalized_exposures.get(
-                player_id,
-                1.0,
-            )
-        )
-
-        maximum_appearances[
-            player_id
-        ] = (
-            _calculate_maximum_appearances(
-                lineup_count=lineup_count,
-                exposure=exposure,
-            )
-        )
+    )
 
     maximum_overlap = (
         roster_size
@@ -428,31 +374,25 @@ def optimize_lineups(
         set[str]
     ] = []
 
-    player_appearance_counts = {
-        player_id: 0
-        for player_id in (
-            pool["player_id"]
-            .astype(str)
+    player_appearance_counts = (
+        initialize_player_appearance_counts(
+            pool=pool
         )
-    }
+    )
 
     for _ in range(
         lineup_count
     ):
-        unavailable_player_ids = {
-            player_id
-            for (
-                player_id,
-                appearance_count,
-            ) in (
-                player_appearance_counts
-                .items()
+        unavailable_player_ids = (
+            get_unavailable_player_ids(
+                player_appearance_counts=(
+                    player_appearance_counts
+                ),
+                maximum_appearances=(
+                    maximum_appearances
+                ),
             )
-            if appearance_count
-            >= maximum_appearances[
-                player_id
-            ]
-        }
+        )
 
         result = _solve_lineup(
             pool=pool,
@@ -493,12 +433,14 @@ def optimize_lineups(
             selected_player_ids
         )
 
-        for player_id in (
-            selected_player_ids
-        ):
-            player_appearance_counts[
-                player_id
-            ] += 1
+        record_player_appearances(
+            selected_player_ids=(
+                selected_player_ids
+            ),
+            player_appearance_counts=(
+                player_appearance_counts
+            ),
+        )
 
     return generated_results
 
