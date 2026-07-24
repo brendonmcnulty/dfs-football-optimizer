@@ -307,12 +307,22 @@ with st.sidebar:
         maximum_players_per_game
     )
 
-    st.subheader("Optimization target")
+    st.subheader("Optimization strategy")
 
+    optimization_options = [
+        "projection",
+        "ceiling",
+        "floor",
+        "balanced",
+        "cash",
+        "single_entry",
+        "large_field_gpp",
+        "custom",
+    ]
     optimization_target = st.selectbox(
-        "Optimize for",
-        options=["projection", "ceiling", "floor", "balanced"],
-        index=["projection", "ceiling", "floor", "balanced"].index(
+        "Strategy",
+        options=optimization_options,
+        index=optimization_options.index(
             st.session_state.get("optimization_target", "projection")
         ),
         format_func=lambda value: {
@@ -320,13 +330,93 @@ with st.sidebar:
             "ceiling": "Ceiling",
             "floor": "Floor",
             "balanced": "Balanced",
+            "cash": "Cash",
+            "single_entry": "Single Entry",
+            "large_field_gpp": "Large-Field GPP",
+            "custom": "Custom Formula",
         }[value],
         help=(
-            "Balanced uses 40% projection, 40% ceiling, and 20% "
-            "salary-adjusted value."
+            "Choose a ready-made contest strategy or build your own "
+            "weighted optimization formula."
         ),
     )
     st.session_state.optimization_target = optimization_target
+
+    preset_weights = {
+        "projection": (100, 0, 0, 0, 0),
+        "ceiling": (0, 100, 0, 0, 0),
+        "floor": (0, 0, 100, 0, 0),
+        "balanced": (40, 40, 0, 20, 0),
+        "cash": (55, 0, 35, 10, 0),
+        "single_entry": (40, 35, 5, 10, 10),
+        "large_field_gpp": (20, 45, 0, 10, 25),
+    }
+
+    if optimization_target == "custom":
+        st.caption("Custom weights must total exactly 100%.")
+        projection_weight = st.slider(
+            "Projection weight",
+            0,
+            100,
+            int(st.session_state.get("projection_weight", 35)),
+        )
+        ceiling_weight = st.slider(
+            "Ceiling weight",
+            0,
+            100,
+            int(st.session_state.get("ceiling_weight", 35)),
+        )
+        floor_weight = st.slider(
+            "Floor weight",
+            0,
+            100,
+            int(st.session_state.get("floor_weight", 10)),
+        )
+        value_weight = st.slider(
+            "Value weight",
+            0,
+            100,
+            int(st.session_state.get("value_weight", 10)),
+        )
+        leverage_weight = st.slider(
+            "Leverage weight",
+            0,
+            100,
+            int(st.session_state.get("leverage_weight", 10)),
+        )
+        custom_weight_total = (
+            projection_weight
+            + ceiling_weight
+            + floor_weight
+            + value_weight
+            + leverage_weight
+        )
+        if custom_weight_total == 100:
+            st.success("Custom weight total: 100%")
+        else:
+            st.error(f"Custom weight total: {custom_weight_total}%")
+    else:
+        (
+            projection_weight,
+            ceiling_weight,
+            floor_weight,
+            value_weight,
+            leverage_weight,
+        ) = preset_weights[optimization_target]
+        st.caption(
+            "Weights: "
+            f"Projection {projection_weight}% · "
+            f"Ceiling {ceiling_weight}% · "
+            f"Floor {floor_weight}% · "
+            f"Value {value_weight}% · "
+            f"Leverage {leverage_weight}%"
+        )
+
+    st.session_state.projection_weight = int(projection_weight)
+    st.session_state.ceiling_weight = int(ceiling_weight)
+    st.session_state.floor_weight = int(floor_weight)
+    st.session_state.value_weight = int(value_weight)
+    st.session_state.leverage_weight = int(leverage_weight)
 
     st.subheader("Ownership")
 
@@ -408,6 +498,11 @@ optimizer_settings = OptimizerSettings(
     maximum_players_per_game=maximum_players_per_game,
     maximum_total_ownership=maximum_total_ownership,
     optimization_target=optimization_target,
+    projection_weight=float(projection_weight),
+    ceiling_weight=float(ceiling_weight),
+    floor_weight=float(floor_weight),
+    value_weight=float(value_weight),
+    leverage_weight=float(leverage_weight),
 )
 
 st.subheader("Player-pool summary")
@@ -811,6 +906,7 @@ if generate_clicked:
                 optimizer_settings.maximum_total_ownership
             ),
             "optimization_target": optimizer_settings.optimization_target,
+            "objective_weights": optimizer_settings.objective_weights,
         }
 
         st.session_state.saved_generated_lineups = {}
@@ -870,6 +966,7 @@ generated_settings = (
                 maximum_total_ownership
             ),
             "optimization_target": optimization_target,
+            "objective_weights": optimizer_settings.objective_weights,
         },
     )
 )
@@ -897,6 +994,32 @@ else:
     st.success(
         f"Generated {generated_count} unique lineups."
     )
+
+strategy_label = {
+    "projection": "Projection",
+    "ceiling": "Ceiling",
+    "floor": "Floor",
+    "balanced": "Balanced",
+    "cash": "Cash",
+    "single_entry": "Single Entry",
+    "large_field_gpp": "Large-Field GPP",
+    "custom": "Custom Formula",
+}.get(
+    generated_settings.get("optimization_target", "projection"),
+    "Projection",
+)
+strategy_weights = generated_settings.get(
+    "objective_weights",
+    optimizer_settings.objective_weights,
+)
+st.caption(
+    f"Optimization strategy: **{strategy_label}** · "
+    f"Projection {strategy_weights['projection']:.0%} · "
+    f"Ceiling {strategy_weights['ceiling']:.0%} · "
+    f"Floor {strategy_weights['floor']:.0%} · "
+    f"Value {strategy_weights['value']:.0%} · "
+    f"Leverage {strategy_weights['leverage']:.0%}"
+)
 
 summary_records: list[dict] = []
 

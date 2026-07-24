@@ -564,6 +564,7 @@ class OptimizerService:
                 settings.maximum_total_ownership
             ),
             optimization_target=settings.optimization_target,
+            objective_weights=settings.objective_weights,
         )
 
         if not results:
@@ -611,6 +612,11 @@ class OptimizerService:
                 settings.maximum_total_ownership
             ),
             optimization_target=settings.optimization_target,
+            projection_weight=settings.projection_weight,
+            ceiling_weight=settings.ceiling_weight,
+            floor_weight=settings.floor_weight,
+            value_weight=settings.value_weight,
+            leverage_weight=settings.leverage_weight,
         )
 
         return self.generate_lineups(

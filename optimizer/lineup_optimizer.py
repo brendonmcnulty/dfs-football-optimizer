@@ -6,6 +6,10 @@ import pandas as pd
 from ortools.sat.python import cp_model
 
 from config import ROSTER_SLOTS, SALARY_CAP
+from optimizer.objectives import (
+    calculate_player_objective_score,
+    validate_objective_weights,
+)
 from optimizer.constraints import (
     add_bring_back_constraints,
     add_dst_correlation_constraints,
@@ -184,6 +188,7 @@ def _solve_lineup(
     maximum_players_per_game: int | None,
     maximum_total_ownership: float | None,
     optimization_target: str,
+    objective_weights: dict[str, float],
 ) -> OptimizationResult:
     """Solve one lineup."""
 
@@ -278,20 +283,16 @@ def _solve_lineup(
         ceiling = float(pool.at[player_index, "ceiling"])
         floor = float(pool.at[player_index, "floor"])
         salary = max(int(pool.at[player_index, "salary"]), 1)
-        value_equivalent = projection * 6000.0 / salary
+        ownership = min(max(float(pool.at[player_index, "ownership"]), 0.0), 100.0)
 
-        if optimization_target == "ceiling":
-            score = ceiling
-        elif optimization_target == "floor":
-            score = floor
-        elif optimization_target == "balanced":
-            score = (
-                0.40 * projection
-                + 0.40 * ceiling
-                + 0.20 * value_equivalent
-            )
-        else:
-            score = projection
+        score = calculate_player_objective_score(
+            projection=projection,
+            ceiling=ceiling,
+            floor=floor,
+            salary=salary,
+            ownership=ownership,
+            objective_weights=objective_weights,
+        )
 
         objective_scores[player_index] = score
 
@@ -372,21 +373,13 @@ def _solve_lineup(
         total_floor=float(lineup["floor"].sum()),
         total_optimization_score=float(
             sum(
-                (
-                    float(row["ceiling"])
-                    if optimization_target == "ceiling"
-                    else float(row["floor"])
-                    if optimization_target == "floor"
-                    else (
-                        0.40 * float(row["projection"])
-                        + 0.40 * float(row["ceiling"])
-                        + 0.20
-                        * float(row["projection"])
-                        * 6000.0
-                        / max(int(row["salary"]), 1)
-                    )
-                    if optimization_target == "balanced"
-                    else float(row["projection"])
+                calculate_player_objective_score(
+                    projection=float(row["projection"]),
+                    ceiling=float(row["ceiling"]),
+                    floor=float(row["floor"]),
+                    salary=int(row["salary"]),
+                    ownership=float(row["ownership"]),
+                    objective_weights=objective_weights,
                 )
                 for _, row in lineup.iterrows()
             )
@@ -419,6 +412,7 @@ def optimize_lineups(
     maximum_players_per_game: int | None = None,
     maximum_total_ownership: float | None = None,
     optimization_target: str = "projection",
+    objective_weights: dict[str, float] | None = None,
 ) -> list[OptimizationResult]:
     """Generate multiple lineups with exposure and QB stacking."""
 
@@ -477,8 +471,29 @@ def optimize_lineups(
             "players per game."
         )
 
-    if optimization_target not in {"projection", "ceiling", "floor", "balanced"}:
+    valid_targets = {
+        "projection",
+        "ceiling",
+        "floor",
+        "balanced",
+        "cash",
+        "single_entry",
+        "large_field_gpp",
+        "custom",
+    }
+    if optimization_target not in valid_targets:
         raise ValueError("Unsupported optimization target.")
+
+    normalized_objective_weights = validate_objective_weights(
+        objective_weights
+        or {
+            "projection": 1.0,
+            "ceiling": 0.0,
+            "floor": 0.0,
+            "value": 0.0,
+            "leverage": 0.0,
+        }
+    )
 
     pool = _prepare_players(players)
 
@@ -563,6 +578,7 @@ def optimize_lineups(
             maximum_players_per_game=maximum_players_per_game,
             maximum_total_ownership=maximum_total_ownership,
             optimization_target=optimization_target,
+            objective_weights=normalized_objective_weights,
         )
 
         if result.lineup.empty:
@@ -612,6 +628,7 @@ def optimize_lineup(
     maximum_players_per_game: int | None = None,
     maximum_total_ownership: float | None = None,
     optimization_target: str = "projection",
+    objective_weights: dict[str, float] | None = None,
 ) -> OptimizationResult:
     """Generate one optimized lineup."""
 
@@ -638,6 +655,7 @@ def optimize_lineup(
         maximum_players_per_game=maximum_players_per_game,
         maximum_total_ownership=maximum_total_ownership,
         optimization_target=optimization_target,
+        objective_weights=objective_weights,
     )
 
     if not results:
