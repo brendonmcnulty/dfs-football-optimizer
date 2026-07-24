@@ -8,6 +8,7 @@ from ortools.sat.python import cp_model
 from config import ROSTER_SLOTS, SALARY_CAP
 from optimizer.constraints import (
     add_bring_back_constraints,
+    add_dst_correlation_constraints,
     add_lineup_uniqueness_constraints,
     add_player_availability_constraints,
     add_position_constraints,
@@ -140,7 +141,8 @@ def _solve_lineup(
     unavailable_player_ids: set[str],
     qb_stack_size: int,
     require_bring_back: bool,
-    maximum_players_per_team: int,
+    maximum_players_per_team: int | None,
+    blocked_dst_opposing_positions: tuple[str, ...],
 ) -> OptimizationResult:
     """Solve one lineup."""
 
@@ -195,9 +197,14 @@ def _solve_lineup(
         model=model,
         pool=pool,
         selected_player=selected_player,
-        maximum_players_per_team=int(
-            maximum_players_per_team
-        ),
+        maximum_players_per_team=maximum_players_per_team,
+    )
+
+    add_dst_correlation_constraints(
+        model=model,
+        pool=pool,
+        selected_player=selected_player,
+        blocked_opposing_positions=blocked_dst_opposing_positions,
     )
 
     projection_expression = sum(
@@ -295,7 +302,8 @@ def optimize_lineups(
     ) = None,
     qb_stack_size: int = 0,
     require_bring_back: bool = False,
-    maximum_players_per_team: int = 0,
+    maximum_players_per_team: int | None = None,
+    blocked_dst_opposing_positions: tuple[str, ...] = ("QB", "WR"),
 ) -> list[OptimizationResult]:
     """Generate multiple lineups with exposure and QB stacking."""
 
@@ -325,11 +333,6 @@ def optimize_lineups(
     if qb_stack_size not in {0, 1, 2}:
         raise ValueError(
             "QB stack size must be 0, 1, or 2."
-        )
-
-    if maximum_players_per_team not in {0, 3, 4, 5}:
-        raise ValueError(
-            "Maximum players per team must be 0, 3, 4, or 5."
         )
 
     pool = _prepare_players(players)
@@ -389,8 +392,9 @@ def optimize_lineups(
             require_bring_back=bool(
                 require_bring_back
             ),
-            maximum_players_per_team=int(
-                maximum_players_per_team
+            maximum_players_per_team=maximum_players_per_team,
+            blocked_dst_opposing_positions=tuple(
+                blocked_dst_opposing_positions
             ),
         )
 
@@ -428,7 +432,8 @@ def optimize_lineup(
     solver_timeout_seconds: float = 15.0,
     qb_stack_size: int = 0,
     require_bring_back: bool = False,
-    maximum_players_per_team: int = 0,
+    maximum_players_per_team: int | None = None,
+    blocked_dst_opposing_positions: tuple[str, ...] = ("QB", "WR"),
 ) -> OptimizationResult:
     """Generate one optimized lineup."""
 
@@ -444,9 +449,6 @@ def optimize_lineup(
         qb_stack_size=int(qb_stack_size),
         require_bring_back=bool(
             require_bring_back
-        ),
-        maximum_players_per_team=int(
-            maximum_players_per_team
         ),
     )
 

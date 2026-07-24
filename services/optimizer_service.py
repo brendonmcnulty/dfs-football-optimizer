@@ -449,13 +449,17 @@ class OptimizerService:
             maximum_players_per_team=(
                 settings.maximum_players_per_team
             ),
+            blocked_dst_opposing_positions=(
+                settings.blocked_dst_opposing_positions
+            ),
         )
 
         if not results:
             raise ValueError(
                 "The optimizer could not create a valid lineup. "
                 "Review salary, locks, exclusions, uniqueness, "
-                "maximum-exposure, QB-stack, bring-back, and team-limit settings."
+                "maximum-exposure, stacking, team-limit, and "
+                "DST-correlation settings."
             )
 
         return results
@@ -481,6 +485,9 @@ class OptimizerService:
             ),
             maximum_players_per_team=(
                 settings.maximum_players_per_team
+            ),
+            blocked_dst_opposing_positions=(
+                settings.blocked_dst_opposing_positions
             ),
         )
 

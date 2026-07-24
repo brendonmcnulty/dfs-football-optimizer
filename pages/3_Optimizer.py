@@ -186,39 +186,83 @@ with st.sidebar:
 
     maximum_players_per_team = st.selectbox(
         "Maximum players per team",
-        options=[
-            0,
-            3,
-            4,
-            5,
-        ],
-        index=[
-            0,
-            3,
-            4,
-            5,
-        ].index(
-            int(
-                st.session_state.get(
-                    "maximum_players_per_team",
-                    0,
-                )
+        options=[None, 3, 4, 5],
+        index=[None, 3, 4, 5].index(
+            st.session_state.get(
+                "maximum_players_per_team",
+                None,
             )
         ),
-        format_func=lambda team_limit: (
-            "No limit"
-            if team_limit == 0
-            else str(team_limit)
+        format_func=lambda value: (
+            "No limit" if value is None else str(value)
         ),
         help=(
-            "Limit the total number of players from any one NFL team "
-            "in each generated lineup."
+            "Limit how many players from the same NFL team may "
+            "appear in one lineup."
         ),
     )
 
-    st.session_state.maximum_players_per_team = int(
+    st.session_state.maximum_players_per_team = (
         maximum_players_per_team
     )
+
+    st.subheader("Defense correlation")
+
+    block_opposing_qb = st.checkbox(
+        "Block opposing QB",
+        value=bool(
+            st.session_state.get(
+                "block_dst_opposing_qb",
+                True,
+            )
+        ),
+    )
+
+    block_opposing_wr = st.checkbox(
+        "Block opposing WR",
+        value=bool(
+            st.session_state.get(
+                "block_dst_opposing_wr",
+                True,
+            )
+        ),
+    )
+
+    block_opposing_rb = st.checkbox(
+        "Block opposing RB",
+        value=bool(
+            st.session_state.get(
+                "block_dst_opposing_rb",
+                False,
+            )
+        ),
+    )
+
+    block_opposing_te = st.checkbox(
+        "Block opposing TE",
+        value=bool(
+            st.session_state.get(
+                "block_dst_opposing_te",
+                False,
+            )
+        ),
+    )
+
+    st.session_state.block_dst_opposing_qb = block_opposing_qb
+    st.session_state.block_dst_opposing_wr = block_opposing_wr
+    st.session_state.block_dst_opposing_rb = block_opposing_rb
+    st.session_state.block_dst_opposing_te = block_opposing_te
+
+blocked_dst_opposing_positions = tuple(
+    position
+    for position, is_blocked in {
+        "QB": block_opposing_qb,
+        "WR": block_opposing_wr,
+        "RB": block_opposing_rb,
+        "TE": block_opposing_te,
+    }.items()
+    if is_blocked
+)
 
 optimizer_settings = OptimizerSettings(
     salary_cap=int(salary_cap),
@@ -233,8 +277,11 @@ optimizer_settings = OptimizerSettings(
     require_bring_back=bool(
         require_bring_back
     ),
-    maximum_players_per_team=int(
+    maximum_players_per_team=(
         maximum_players_per_team
+    ),
+    blocked_dst_opposing_positions=(
+        blocked_dst_opposing_positions
     ),
 )
 
@@ -517,8 +564,11 @@ if generate_clicked:
             "require_bring_back": bool(
                 optimizer_settings.require_bring_back
             ),
-            "maximum_players_per_team": int(
+            "maximum_players_per_team": (
                 optimizer_settings.maximum_players_per_team
+            ),
+            "blocked_dst_opposing_positions": list(
+                optimizer_settings.blocked_dst_opposing_positions
             ),
         }
 
@@ -563,8 +613,11 @@ generated_settings = (
             "require_bring_back": bool(
                 require_bring_back
             ),
-            "maximum_players_per_team": int(
+            "maximum_players_per_team": (
                 maximum_players_per_team
+            ),
+            "blocked_dst_opposing_positions": list(
+                blocked_dst_opposing_positions
             ),
         },
     )
@@ -586,7 +639,7 @@ if generated_count < requested_lineup_count:
     st.warning(
         f"The optimizer generated {generated_count} of the "
         f"{requested_lineup_count} requested lineups. The current "
-        "salary, uniqueness, lock, exclusion, exposure, stacking, or team-limit rules "
+        "salary, uniqueness, lock, exclusion, exposure, or stacking rules "
         "prevented additional valid lineups."
     )
 else:

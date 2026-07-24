@@ -16,7 +16,8 @@ class OptimizerSettings:
     minimum_unique_players: int = 1
     qb_stack_size: int = 0
     require_bring_back: bool = False
-    maximum_players_per_team: int = 0
+    maximum_players_per_team: int | None = None
+    blocked_dst_opposing_positions: tuple[str, ...] = ("QB", "WR")
 
     def validate(self) -> None:
         """Validate optimizer settings before they are used."""
@@ -74,9 +75,27 @@ class OptimizerSettings:
                 "Require bring-back must be true or false."
             )
 
-        if self.maximum_players_per_team not in {0, 3, 4, 5}:
+        if (
+            self.maximum_players_per_team is not None
+            and self.maximum_players_per_team < 1
+        ):
             raise ValueError(
-                "Maximum players per team must be 0, 3, 4, or 5."
+                "Maximum players per team must be at least one or None."
+            )
+
+        valid_dst_positions = {"QB", "RB", "WR", "TE"}
+        normalized_dst_positions = {
+            str(position).upper().strip()
+            for position in self.blocked_dst_opposing_positions
+        }
+        invalid_dst_positions = (
+            normalized_dst_positions - valid_dst_positions
+        )
+
+        if invalid_dst_positions:
+            raise ValueError(
+                "Unsupported DST correlation positions: "
+                f"{sorted(invalid_dst_positions)}"
             )
 
     @property
