@@ -542,6 +542,62 @@ if reset_exposures_clicked:
     st.rerun()
 
 st.markdown("---")
+st.subheader("Maximum team exposure")
+st.caption(
+    "A team counts once when any player from that NFL team appears in a "
+    "lineup. Teams with locked players must remain at 100%."
+)
+
+team_exposure_table = pd.DataFrame(
+    {"team": sorted(players["team"].astype(str).str.upper().unique())}
+)
+saved_team_exposures = st.session_state.get("team_max_exposures", {})
+team_exposure_table["maximum_exposure"] = (
+    team_exposure_table["team"]
+    .map(saved_team_exposures)
+    .fillna(1.0)
+)
+
+edited_team_exposure_table = st.data_editor(
+    team_exposure_table,
+    width="stretch",
+    hide_index=True,
+    disabled=["team"],
+    column_config={
+        "team": st.column_config.TextColumn("Team"),
+        "maximum_exposure": st.column_config.NumberColumn(
+            "Maximum exposure",
+            min_value=0.0,
+            max_value=1.0,
+            step=0.05,
+            format="percent",
+            help="1.00 = 100%, 0.50 = 50%, 0.25 = 25%",
+        ),
+    },
+    key="team_exposure_editor",
+)
+
+team_max_exposures = {
+    str(row["team"]).upper(): float(row["maximum_exposure"])
+    for _, row in edited_team_exposure_table.iterrows()
+}
+st.session_state.team_max_exposures = team_max_exposures
+
+st.write(
+    "**Teams with exposure limits:** "
+    f"{sum(exposure < 1.0 for exposure in team_max_exposures.values())}"
+)
+
+if st.button("Reset all maximum team exposures to 100%"):
+    st.session_state.team_max_exposures = {
+        str(team).upper(): 1.0
+        for team in players["team"].astype(str).unique()
+    }
+    if "team_exposure_editor" in st.session_state:
+        del st.session_state["team_exposure_editor"]
+    st.rerun()
+
+st.markdown("---")
 
 generate_clicked = st.button(
     "Generate lineups",
@@ -558,6 +614,7 @@ if generate_clicked:
                 player_max_exposures=(
                     player_max_exposures
                 ),
+                team_max_exposures=team_max_exposures,
             )
         )
 
@@ -584,6 +641,9 @@ if generate_clicked:
         st.session_state.generated_exposure_rules = (
             player_max_exposures.copy()
         )
+        st.session_state.generated_team_exposure_rules = (
+            team_max_exposures.copy()
+        )
 
         st.session_state.generated_exposure_report = (
             optimizer_service.build_exposure_report(
@@ -591,6 +651,13 @@ if generate_clicked:
                 player_max_exposures=(
                     player_max_exposures
                 ),
+            )
+        )
+
+        st.session_state.generated_team_exposure_report = (
+            optimizer_service.build_team_exposure_report(
+                lineups=generated_lineups,
+                team_max_exposures=team_max_exposures,
             )
         )
 
@@ -772,6 +839,42 @@ st.dataframe(
         ),
         "status": st.column_config.TextColumn(
             "Status",
+        ),
+    },
+)
+
+st.markdown("---")
+st.subheader("Team exposure")
+
+team_exposure_report = st.session_state.get(
+    "generated_team_exposure_report"
+)
+if team_exposure_report is None:
+    team_exposure_report = optimizer_service.build_team_exposure_report(
+        lineups=generated_lineups,
+        team_max_exposures=st.session_state.get(
+            "generated_team_exposure_rules",
+            {},
+        ),
+    )
+
+st.dataframe(
+    team_exposure_report,
+    width="stretch",
+    hide_index=True,
+    column_config={
+        "team": st.column_config.TextColumn("Team"),
+        "lineup_count": st.column_config.NumberColumn(
+            "Lineups",
+            format="%d",
+        ),
+        "exposure": st.column_config.NumberColumn(
+            "Actual exposure",
+            format="percent",
+        ),
+        "maximum_exposure": st.column_config.NumberColumn(
+            "Maximum exposure",
+            format="percent",
         ),
     },
 )

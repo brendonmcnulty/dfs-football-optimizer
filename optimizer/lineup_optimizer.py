@@ -16,10 +16,15 @@ from optimizer.constraints import (
     add_qb_stack_constraints,
     add_salary_constraints,
     add_team_limit_constraints,
+    add_unavailable_team_constraints,
+    build_team_maximum_appearances,
     build_maximum_appearances,
     get_unavailable_player_ids,
+    get_unavailable_teams,
     initialize_player_appearance_counts,
+    initialize_team_appearance_counts,
     record_player_appearances,
+    record_team_appearances,
 )
 
 
@@ -140,6 +145,7 @@ def _solve_lineup(
     previous_player_sets: list[set[str]],
     maximum_overlap: int,
     unavailable_player_ids: set[str],
+    unavailable_teams: set[str],
     qb_stack_size: int,
     require_bring_back: bool,
     maximum_players_per_team: int | None,
@@ -162,6 +168,13 @@ def _solve_lineup(
         pool=pool,
         selected_player=selected_player,
         unavailable_player_ids=unavailable_player_ids,
+    )
+
+    add_unavailable_team_constraints(
+        model=model,
+        pool=pool,
+        selected_player=selected_player,
+        unavailable_teams=unavailable_teams,
     )
 
     add_salary_constraints(
@@ -313,6 +326,9 @@ def optimize_lineups(
     player_max_exposures: (
         dict[str, float] | None
     ) = None,
+    team_max_exposures: (
+        dict[str, float] | None
+    ) = None,
     qb_stack_size: int = 0,
     require_bring_back: bool = False,
     maximum_players_per_team: int | None = None,
@@ -385,6 +401,12 @@ def optimize_lineups(
         player_max_exposures=player_max_exposures,
     )
 
+    team_maximum_appearances = build_team_maximum_appearances(
+        pool=pool,
+        lineup_count=int(lineup_count),
+        team_max_exposures=team_max_exposures,
+    )
+
     maximum_overlap = (
         roster_size
         - int(minimum_unique_players)
@@ -404,6 +426,10 @@ def optimize_lineups(
         )
     )
 
+    team_appearance_counts = initialize_team_appearance_counts(
+        pool=pool
+    )
+
     for _ in range(lineup_count):
         unavailable_player_ids = (
             get_unavailable_player_ids(
@@ -414,6 +440,11 @@ def optimize_lineups(
                     maximum_appearances
                 ),
             )
+        )
+
+        unavailable_teams = get_unavailable_teams(
+            team_appearance_counts=team_appearance_counts,
+            maximum_appearances=team_maximum_appearances,
         )
 
         result = _solve_lineup(
@@ -430,6 +461,7 @@ def optimize_lineups(
             unavailable_player_ids=(
                 unavailable_player_ids
             ),
+            unavailable_teams=unavailable_teams,
             qb_stack_size=int(qb_stack_size),
             require_bring_back=bool(
                 require_bring_back
@@ -466,6 +498,13 @@ def optimize_lineups(
             player_appearance_counts=(
                 player_appearance_counts
             ),
+        )
+
+        record_team_appearances(
+            selected_teams=set(
+                result.lineup["team"].astype(str)
+            ),
+            team_appearance_counts=team_appearance_counts,
         )
 
     return generated_results

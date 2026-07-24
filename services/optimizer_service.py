@@ -401,11 +401,59 @@ class OptimizerService:
 
         return normalized_exposures
 
+    def validate_team_max_exposures(
+        self,
+        players: pd.DataFrame,
+        team_max_exposures: dict[str, float],
+    ) -> dict[str, float]:
+        """Validate and normalize team portfolio exposure limits."""
+
+        valid_teams = {
+            str(team).upper().strip()
+            for team in players["team"]
+            if str(team).strip()
+        }
+        normalized: dict[str, float] = {}
+
+        for team, exposure in team_max_exposures.items():
+            normalized_team = str(team).upper().strip()
+            normalized_exposure = float(exposure)
+
+            if normalized_team not in valid_teams:
+                raise ValueError(
+                    "Maximum exposure was provided for an unknown team: "
+                    f"{normalized_team}"
+                )
+            if normalized_exposure < 0 or normalized_exposure > 1:
+                raise ValueError(
+                    "Maximum team exposure must be between 0% and 100%."
+                )
+            normalized[normalized_team] = normalized_exposure
+
+        locked_teams = {
+            str(team).upper().strip()
+            for team in players.loc[
+                players["locked"].fillna(False).astype(bool),
+                "team",
+            ]
+        }
+        for team in locked_teams:
+            if normalized.get(team, 1.0) < 1.0:
+                raise ValueError(
+                    f"{team} has a locked player, so its maximum team "
+                    "exposure must be 100%."
+                )
+
+        return normalized
+
     def generate_lineups(
         self,
         players: pd.DataFrame,
         settings: OptimizerSettings,
         player_max_exposures: (
+            dict[str, float] | None
+        ) = None,
+        team_max_exposures: (
             dict[str, float] | None
         ) = None,
     ) -> list[OptimizationResult]:
@@ -426,6 +474,11 @@ class OptimizerService:
             )
         )
 
+        normalized_team_exposures = self.validate_team_max_exposures(
+            players=prepared_players,
+            team_max_exposures=team_max_exposures or {},
+        )
+
         results = optimize_lineups(
             players=prepared_players,
             lineup_count=settings.lineup_count,
@@ -440,6 +493,7 @@ class OptimizerService:
             player_max_exposures=(
                 normalized_exposures
             ),
+            team_max_exposures=normalized_team_exposures,
             qb_stack_size=(
                 settings.qb_stack_size
             ),
@@ -507,6 +561,50 @@ class OptimizerService:
             players=players,
             settings=single_lineup_settings,
         )[0]
+
+    def build_team_exposure_report(
+        self,
+        lineups: list[pd.DataFrame],
+        team_max_exposures: dict[str, float] | None = None,
+    ) -> pd.DataFrame:
+        """Calculate how often each NFL team appears in the portfolio."""
+
+        columns = [
+            "team",
+            "lineup_count",
+            "exposure",
+            "maximum_exposure",
+        ]
+        if not lineups:
+            return pd.DataFrame(columns=columns)
+
+        records: list[dict] = []
+        for lineup_number, lineup in enumerate(lineups, start=1):
+            for team in sorted(set(lineup["team"].astype(str))):
+                records.append(
+                    {
+                        "lineup_number": lineup_number,
+                        "team": str(team).upper().strip(),
+                    }
+                )
+
+        report = (
+            pd.DataFrame(records)
+            .groupby("team", as_index=False)
+            .agg(lineup_count=("lineup_number", "nunique"))
+        )
+        report["exposure"] = report["lineup_count"] / len(lineups)
+        maximum_map = {
+            str(team).upper().strip(): float(exposure)
+            for team, exposure in (team_max_exposures or {}).items()
+        }
+        report["maximum_exposure"] = (
+            report["team"].map(maximum_map).fillna(1.0)
+        )
+        return report.sort_values(
+            ["exposure", "team"],
+            ascending=[False, True],
+        ).reset_index(drop=True)
 
     def build_exposure_report(
         self,

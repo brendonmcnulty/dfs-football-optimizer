@@ -30,6 +30,14 @@ from optimizer.constraints.salary import (
 from optimizer.constraints.stacks import (
     add_qb_stack_constraints,
 )
+from optimizer.constraints.team_exposure import (
+    add_unavailable_team_constraints,
+    build_team_maximum_appearances,
+    get_unavailable_teams,
+    initialize_team_appearance_counts,
+    normalize_team_exposures,
+    record_team_appearances,
+)
 from optimizer.constraints.team_limits import (
     add_team_limit_constraints,
 )
@@ -38,6 +46,12 @@ from optimizer.constraints.uniqueness import (
 )
 
 __all__ = [
+    "add_unavailable_team_constraints",
+    "build_team_maximum_appearances",
+    "get_unavailable_teams",
+    "initialize_team_appearance_counts",
+    "normalize_team_exposures",
+    "record_team_appearances",
     "add_game_stack_constraints",
     "add_dst_correlation_constraints",
     "add_bring_back_constraints",
