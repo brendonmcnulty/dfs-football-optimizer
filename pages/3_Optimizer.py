@@ -8,6 +8,7 @@ import streamlit as st
 from config import SALARY_CAP
 from core.settings import OptimizerSettings
 from database import DatabaseManager
+from data_loader import add_derived_metrics
 from services import OptimizerService
 
 
@@ -34,6 +35,14 @@ if "player_pool" not in st.session_state:
     st.stop()
 
 players = st.session_state.player_pool.copy()
+if "ceiling" not in players.columns:
+    players["ceiling"] = players["projection"]
+if "floor" not in players.columns:
+    players["floor"] = players["projection"]
+if "ownership" not in players.columns:
+    players["ownership"] = 0.0
+players = add_derived_metrics(players)
+st.session_state.player_pool = players.copy()
 
 active_slate_name = st.session_state.get(
     "active_slate_name",
@@ -298,6 +307,27 @@ with st.sidebar:
         maximum_players_per_game
     )
 
+    st.subheader("Optimization target")
+
+    optimization_target = st.selectbox(
+        "Optimize for",
+        options=["projection", "ceiling", "floor", "balanced"],
+        index=["projection", "ceiling", "floor", "balanced"].index(
+            st.session_state.get("optimization_target", "projection")
+        ),
+        format_func=lambda value: {
+            "projection": "Projection",
+            "ceiling": "Ceiling",
+            "floor": "Floor",
+            "balanced": "Balanced",
+        }[value],
+        help=(
+            "Balanced uses 40% projection, 40% ceiling, and 20% "
+            "salary-adjusted value."
+        ),
+    )
+    st.session_state.optimization_target = optimization_target
+
     st.subheader("Ownership")
 
     limit_total_ownership = st.checkbox(
@@ -377,6 +407,7 @@ optimizer_settings = OptimizerSettings(
     ),
     maximum_players_per_game=maximum_players_per_game,
     maximum_total_ownership=maximum_total_ownership,
+    optimization_target=optimization_target,
 )
 
 st.subheader("Player-pool summary")
@@ -425,7 +456,11 @@ with st.expander(
                 "opponent",
                 "salary",
                 "projection",
+                "ceiling",
+                "floor",
+                "value",
                 "ownership",
+                "leverage",
                 "locked",
                 "excluded",
             ]
@@ -450,7 +485,11 @@ default_exposure_table = players[
         "team",
         "salary",
         "projection",
+        "ceiling",
+        "floor",
+        "value",
         "ownership",
+        "leverage",
         "locked",
         "excluded",
     ]
@@ -481,7 +520,11 @@ edited_exposure_table = st.data_editor(
         "team",
         "salary",
         "projection",
+        "ceiling",
+        "floor",
+        "value",
         "ownership",
+        "leverage",
     ],
     column_config={
         "player_id": None,
@@ -500,6 +543,22 @@ edited_exposure_table = st.data_editor(
         ),
         "projection": st.column_config.NumberColumn(
             "Projection",
+            format="%.2f",
+        ),
+        "ceiling": st.column_config.NumberColumn(
+            "Ceiling",
+            format="%.2f",
+        ),
+        "floor": st.column_config.NumberColumn(
+            "Floor",
+            format="%.2f",
+        ),
+        "value": st.column_config.NumberColumn(
+            "Value",
+            format="%.2f",
+        ),
+        "leverage": st.column_config.NumberColumn(
+            "Leverage",
             format="%.2f",
         ),
         "ownership": st.column_config.NumberColumn(
@@ -682,9 +741,10 @@ if generate_clicked:
         st.session_state.generated_lineup_metadata = [
             {
                 "total_salary": result.total_salary,
-                "total_projection": (
-                    result.total_projection
-                ),
+                "total_projection": result.total_projection,
+                "total_ceiling": result.total_ceiling,
+                "total_floor": result.total_floor,
+                "total_optimization_score": result.total_optimization_score,
                 "total_ownership": (
                     result.total_ownership
                 ),
@@ -750,6 +810,7 @@ if generate_clicked:
             "maximum_total_ownership": (
                 optimizer_settings.maximum_total_ownership
             ),
+            "optimization_target": optimizer_settings.optimization_target,
         }
 
         st.session_state.saved_generated_lineups = {}
@@ -808,6 +869,7 @@ generated_settings = (
             "maximum_total_ownership": (
                 maximum_total_ownership
             ),
+            "optimization_target": optimization_target,
         },
     )
 )
@@ -854,9 +916,10 @@ for lineup_index, metadata in enumerate(
                     metadata["total_salary"]
                 )
             ),
-            "total_projection": float(
-                metadata["total_projection"]
-            ),
+            "total_projection": float(metadata["total_projection"]),
+            "total_ceiling": float(metadata.get("total_ceiling", 0.0)),
+            "total_floor": float(metadata.get("total_floor", 0.0)),
+            "optimization_score": float(metadata.get("total_optimization_score", metadata["total_projection"])),
             "total_ownership": float(
                 metadata.get("total_ownership", 0.0)
             ),
@@ -898,11 +961,21 @@ st.dataframe(
                 format="$%d",
             )
         ),
-        "total_projection": (
-            st.column_config.NumberColumn(
-                "Projection",
-                format="%.2f",
-            )
+        "total_projection": st.column_config.NumberColumn(
+            "Projection",
+            format="%.2f",
+        ),
+        "total_ceiling": st.column_config.NumberColumn(
+            "Ceiling",
+            format="%.2f",
+        ),
+        "total_floor": st.column_config.NumberColumn(
+            "Floor",
+            format="%.2f",
+        ),
+        "optimization_score": st.column_config.NumberColumn(
+            "Target score",
+            format="%.2f",
         ),
         "total_ownership": st.column_config.NumberColumn(
             "Total ownership",

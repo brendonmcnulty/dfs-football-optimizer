@@ -36,6 +36,9 @@ class OptimizationResult:
     lineup: pd.DataFrame
     total_salary: int
     total_projection: float
+    total_ceiling: float
+    total_floor: float
+    total_optimization_score: float
     total_ownership: float
     status: str
 
@@ -53,6 +56,8 @@ def _prepare_players(
         "opponent",
         "salary",
         "projection",
+        "ceiling",
+        "floor",
         "ownership",
         "locked",
         "excluded",
@@ -108,10 +113,27 @@ def _prepare_players(
         errors="raise",
     ).astype(float)
 
+    pool["ceiling"] = pd.to_numeric(
+        pool["ceiling"],
+        errors="raise",
+    ).astype(float)
+
+    pool["floor"] = pd.to_numeric(
+        pool["floor"],
+        errors="raise",
+    ).astype(float)
+
+    pool["value"] = (
+        pool["projection"] / pool["salary"] * 1000.0
+    )
+
     pool["ownership"] = pd.to_numeric(
         pool["ownership"],
         errors="raise",
     ).astype(float)
+    pool["leverage"] = (
+        pool["ceiling"] / pool["ownership"].clip(lower=1.0)
+    )
 
     pool["locked"] = (
         pool["locked"]
@@ -161,6 +183,7 @@ def _solve_lineup(
     minimum_players_from_primary_game: int | None,
     maximum_players_per_game: int | None,
     maximum_total_ownership: float | None,
+    optimization_target: str,
 ) -> OptimizationResult:
     """Solve one lineup."""
 
@@ -249,23 +272,36 @@ def _solve_lineup(
         maximum_total_ownership=maximum_total_ownership,
     )
 
-    projection_expression = sum(
-        int(
-            round(
-                float(
-                    pool.at[
-                        player_index,
-                        "projection",
-                    ]
-                )
-                * 100
+    objective_scores: dict[int, float] = {}
+    for player_index in pool.index:
+        projection = float(pool.at[player_index, "projection"])
+        ceiling = float(pool.at[player_index, "ceiling"])
+        floor = float(pool.at[player_index, "floor"])
+        salary = max(int(pool.at[player_index, "salary"]), 1)
+        value_equivalent = projection * 6000.0 / salary
+
+        if optimization_target == "ceiling":
+            score = ceiling
+        elif optimization_target == "floor":
+            score = floor
+        elif optimization_target == "balanced":
+            score = (
+                0.40 * projection
+                + 0.40 * ceiling
+                + 0.20 * value_equivalent
             )
-        )
+        else:
+            score = projection
+
+        objective_scores[player_index] = score
+
+    objective_expression = sum(
+        int(round(objective_scores[player_index] * 1000))
         * selected_player[player_index]
         for player_index in pool.index
     )
 
-    model.Maximize(projection_expression)
+    model.Maximize(objective_expression)
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = float(
@@ -283,6 +319,9 @@ def _solve_lineup(
             lineup=pd.DataFrame(),
             total_salary=0,
             total_projection=0.0,
+            total_ceiling=0.0,
+            total_floor=0.0,
+            total_optimization_score=0.0,
             total_ownership=0.0,
             status=status_name,
         )
@@ -329,6 +368,29 @@ def _solve_lineup(
         total_projection=float(
             lineup["projection"].sum()
         ),
+        total_ceiling=float(lineup["ceiling"].sum()),
+        total_floor=float(lineup["floor"].sum()),
+        total_optimization_score=float(
+            sum(
+                (
+                    float(row["ceiling"])
+                    if optimization_target == "ceiling"
+                    else float(row["floor"])
+                    if optimization_target == "floor"
+                    else (
+                        0.40 * float(row["projection"])
+                        + 0.40 * float(row["ceiling"])
+                        + 0.20
+                        * float(row["projection"])
+                        * 6000.0
+                        / max(int(row["salary"]), 1)
+                    )
+                    if optimization_target == "balanced"
+                    else float(row["projection"])
+                )
+                for _, row in lineup.iterrows()
+            )
+        ),
         total_ownership=float(
             lineup["ownership"].sum()
         ),
@@ -356,6 +418,7 @@ def optimize_lineups(
     minimum_players_from_primary_game: int | None = None,
     maximum_players_per_game: int | None = None,
     maximum_total_ownership: float | None = None,
+    optimization_target: str = "projection",
 ) -> list[OptimizationResult]:
     """Generate multiple lineups with exposure and QB stacking."""
 
@@ -413,6 +476,9 @@ def optimize_lineups(
             "The primary-game minimum cannot exceed the maximum "
             "players per game."
         )
+
+    if optimization_target not in {"projection", "ceiling", "floor", "balanced"}:
+        raise ValueError("Unsupported optimization target.")
 
     pool = _prepare_players(players)
 
@@ -496,6 +562,7 @@ def optimize_lineups(
             ),
             maximum_players_per_game=maximum_players_per_game,
             maximum_total_ownership=maximum_total_ownership,
+            optimization_target=optimization_target,
         )
 
         if result.lineup.empty:
@@ -544,6 +611,7 @@ def optimize_lineup(
     minimum_players_from_primary_game: int | None = None,
     maximum_players_per_game: int | None = None,
     maximum_total_ownership: float | None = None,
+    optimization_target: str = "projection",
 ) -> OptimizationResult:
     """Generate one optimized lineup."""
 
@@ -569,6 +637,7 @@ def optimize_lineup(
         ),
         maximum_players_per_game=maximum_players_per_game,
         maximum_total_ownership=maximum_total_ownership,
+        optimization_target=optimization_target,
     )
 
     if not results:
@@ -576,6 +645,9 @@ def optimize_lineup(
             lineup=pd.DataFrame(),
             total_salary=0,
             total_projection=0.0,
+            total_ceiling=0.0,
+            total_floor=0.0,
+            total_optimization_score=0.0,
             total_ownership=0.0,
             status="INFEASIBLE",
         )

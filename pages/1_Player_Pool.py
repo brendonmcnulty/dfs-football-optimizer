@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from data_loader import merge_projections, normalize_player_pool
+from data_loader import add_derived_metrics, merge_projections, normalize_player_pool
 from database import DatabaseManager
 
 
@@ -116,6 +116,13 @@ if "player_pool" not in st.session_state:
     st.stop()
 
 players = st.session_state.player_pool.copy()
+if "ceiling" not in players.columns:
+    players["ceiling"] = players["projection"]
+if "floor" not in players.columns:
+    players["floor"] = players["projection"]
+if "ownership" not in players.columns:
+    players["ownership"] = 0.0
+players = add_derived_metrics(players)
 
 st.subheader("Active slate")
 
@@ -129,7 +136,8 @@ st.write(f"**{active_slate_name}**")
 st.subheader("Players")
 
 st.write(
-    "Edit projections and projected ownership directly. Check **Lock** to force a player into every "
+    "Edit projection, ceiling, floor, and projected ownership directly. "
+    "Value and leverage update automatically. Check **Lock** to force a player into every "
     "generated lineup or **Exclude** to remove the player from consideration."
 )
 
@@ -145,6 +153,8 @@ edited_players = st.data_editor(
         "team",
         "opponent",
         "salary",
+        "value",
+        "leverage",
     ],
     column_config={
         "player_id": st.column_config.TextColumn(
@@ -172,6 +182,28 @@ edited_players = st.data_editor(
             step=0.1,
             format="%.2f",
         ),
+        "ceiling": st.column_config.NumberColumn(
+            "Ceiling",
+            min_value=0.0,
+            step=0.1,
+            format="%.2f",
+        ),
+        "floor": st.column_config.NumberColumn(
+            "Floor",
+            min_value=0.0,
+            step=0.1,
+            format="%.2f",
+        ),
+        "value": st.column_config.NumberColumn(
+            "Value",
+            format="%.2f",
+            help="Projected points per $1,000 of salary.",
+        ),
+        "leverage": st.column_config.NumberColumn(
+            "Leverage",
+            format="%.2f",
+            help="Ceiling divided by projected ownership, with a 1% minimum denominator.",
+        ),
         "ownership": st.column_config.NumberColumn(
             "Ownership %",
             min_value=0.0,
@@ -189,6 +221,7 @@ edited_players = st.data_editor(
     },
 )
 
+edited_players = add_derived_metrics(edited_players)
 st.session_state.player_pool = edited_players.copy()
 st.session_state.season = int(season)
 st.session_state.week = int(week)

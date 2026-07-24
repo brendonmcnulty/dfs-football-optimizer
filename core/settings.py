@@ -21,6 +21,7 @@ class OptimizerSettings:
     minimum_players_from_primary_game: int | None = None
     maximum_players_per_game: int | None = None
     maximum_total_ownership: float | None = None
+    optimization_target: str = "projection"
 
     def validate(self) -> None:
         """Validate optimizer settings before they are used."""
@@ -135,6 +136,18 @@ class OptimizerSettings:
         ):
             raise ValueError(
                 "Maximum total ownership cannot be negative."
+            )
+
+        valid_targets = {
+            "projection",
+            "ceiling",
+            "floor",
+            "balanced",
+        }
+        if self.optimization_target not in valid_targets:
+            raise ValueError(
+                "Optimization target must be projection, ceiling, "
+                "floor, or balanced."
             )
 
     @property

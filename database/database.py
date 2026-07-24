@@ -75,6 +75,8 @@ class DatabaseManager:
                     opponent TEXT,
                     salary INTEGER NOT NULL,
                     projection REAL NOT NULL DEFAULT 0,
+                    ceiling REAL NOT NULL DEFAULT 0,
+                    floor REAL NOT NULL DEFAULT 0,
                     ownership REAL NOT NULL DEFAULT 0,
                     locked INTEGER NOT NULL DEFAULT 0,
                     excluded INTEGER NOT NULL DEFAULT 0,
@@ -135,6 +137,18 @@ class DatabaseManager:
                     "PRAGMA table_info(players)"
                 ).fetchall()
             }
+
+            if "ceiling" not in player_columns:
+                connection.execute(
+                    "ALTER TABLE players ADD COLUMN ceiling REAL NOT NULL DEFAULT 0"
+                )
+                connection.execute("UPDATE players SET ceiling = projection")
+
+            if "floor" not in player_columns:
+                connection.execute(
+                    "ALTER TABLE players ADD COLUMN floor REAL NOT NULL DEFAULT 0"
+                )
+                connection.execute("UPDATE players SET floor = projection")
 
             if "ownership" not in player_columns:
                 connection.execute(

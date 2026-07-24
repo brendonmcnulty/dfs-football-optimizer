@@ -87,3 +87,10 @@ Phase 2 will generate multiple lineups and add:
 - QB/pass-catcher stacks
 - Opponent bring-backs
 - Team limits
+
+## Projection Engine (v1.1)
+
+Player pools now support median projection, ceiling, floor, projected ownership,
+automatic value (points per $1,000), and leverage (ceiling divided by ownership).
+The optimizer can target Projection, Ceiling, Floor, or a Balanced score. The
+Balanced score uses 40% projection, 40% ceiling, and 20% salary-adjusted value.

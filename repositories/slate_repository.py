@@ -95,6 +95,8 @@ class SlateRepository:
             "opponent",
             "salary",
             "projection",
+            "ceiling",
+            "floor",
             "ownership",
             "locked",
             "excluded",
@@ -143,13 +145,15 @@ class SlateRepository:
                         opponent,
                         salary,
                         projection,
+                        ceiling,
+                        floor,
                         ownership,
                         locked,
                         excluded,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(slate_id, external_player_id)
                     DO UPDATE SET
                         player_name = excluded.player_name,
@@ -158,6 +162,8 @@ class SlateRepository:
                         opponent = excluded.opponent,
                         salary = excluded.salary,
                         projection = excluded.projection,
+                        ceiling = excluded.ceiling,
+                        floor = excluded.floor,
                         ownership = excluded.ownership,
                         locked = excluded.locked,
                         excluded = excluded.excluded,
@@ -172,6 +178,8 @@ class SlateRepository:
                         str(opponent),
                         int(player["salary"]),
                         float(player["projection"]),
+                        float(player["ceiling"]),
+                        float(player["floor"]),
                         float(player["ownership"]),
                         int(bool(player["locked"])),
                         int(bool(player["excluded"])),
@@ -226,6 +234,8 @@ class SlateRepository:
                     opponent,
                     salary,
                     projection,
+                    ceiling,
+                    floor,
                     ownership,
                     locked,
                     excluded

@@ -20,6 +20,8 @@ class OptimizerService:
         "opponent",
         "salary",
         "projection",
+        "ceiling",
+        "floor",
         "ownership",
         "locked",
         "excluded",
@@ -134,6 +136,17 @@ class OptimizerService:
             raise ValueError(
                 "Player projections cannot be negative."
             )
+
+        for metric_name in ("ceiling", "floor"):
+            values = pd.to_numeric(players[metric_name], errors="coerce")
+            if values.isna().any():
+                raise ValueError(
+                    f"One or more players have an invalid {metric_name}."
+                )
+            if (values < 0).any():
+                raise ValueError(
+                    f"Player {metric_name} values cannot be negative."
+                )
 
         ownership = pd.to_numeric(
             players["ownership"],
@@ -339,10 +352,24 @@ class OptimizerService:
             errors="raise",
         ).astype(float)
 
+        prepared["ceiling"] = pd.to_numeric(
+            prepared["ceiling"], errors="raise"
+        ).astype(float)
+        prepared["floor"] = pd.to_numeric(
+            prepared["floor"], errors="raise"
+        ).astype(float)
+        prepared["value"] = (
+            prepared["projection"] / prepared["salary"] * 1000.0
+        )
+
         prepared["ownership"] = pd.to_numeric(
             prepared["ownership"],
             errors="raise",
         ).astype(float)
+        prepared["leverage"] = (
+            prepared["ceiling"]
+            / prepared["ownership"].clip(lower=1.0)
+        )
 
         prepared["locked"] = (
             prepared["locked"]
@@ -536,6 +563,7 @@ class OptimizerService:
             maximum_total_ownership=(
                 settings.maximum_total_ownership
             ),
+            optimization_target=settings.optimization_target,
         )
 
         if not results:
@@ -582,6 +610,7 @@ class OptimizerService:
             maximum_total_ownership=(
                 settings.maximum_total_ownership
             ),
+            optimization_target=settings.optimization_target,
         )
 
         return self.generate_lineups(
@@ -649,6 +678,11 @@ class OptimizerService:
             "team",
             "salary",
             "projection",
+            "ceiling",
+            "floor",
+            "value",
+            "ownership",
+            "leverage",
             "lineup_count",
             "exposure",
             "maximum_exposure",
@@ -666,6 +700,11 @@ class OptimizerService:
             "team",
             "salary",
             "projection",
+            "ceiling",
+            "floor",
+            "value",
+            "ownership",
+            "leverage",
         }
 
         portfolio_records: list[dict] = []
@@ -713,9 +752,12 @@ class OptimizerService:
                         "salary": int(
                             player["salary"]
                         ),
-                        "projection": float(
-                            player["projection"]
-                        ),
+                        "projection": float(player["projection"]),
+                        "ceiling": float(player["ceiling"]),
+                        "floor": float(player["floor"]),
+                        "value": float(player["value"]),
+                        "ownership": float(player["ownership"]),
+                        "leverage": float(player["leverage"]),
                     }
                 )
 
@@ -734,6 +776,11 @@ class OptimizerService:
                     "team",
                     "salary",
                     "projection",
+                    "ceiling",
+                    "floor",
+                    "value",
+                    "ownership",
+                    "leverage",
                 ],
                 as_index=False,
             )
