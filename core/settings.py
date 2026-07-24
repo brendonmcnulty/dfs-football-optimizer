@@ -16,6 +16,7 @@ class OptimizerSettings:
     minimum_unique_players: int = 1
     qb_stack_size: int = 0
     require_bring_back: bool = False
+    maximum_players_per_team: int = 0
 
     def validate(self) -> None:
         """Validate optimizer settings before they are used."""
@@ -71,6 +72,11 @@ class OptimizerSettings:
         ):
             raise ValueError(
                 "Require bring-back must be true or false."
+            )
+
+        if self.maximum_players_per_team not in {0, 3, 4, 5}:
+            raise ValueError(
+                "Maximum players per team must be 0, 3, 4, or 5."
             )
 
     @property

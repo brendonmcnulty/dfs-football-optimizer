@@ -184,6 +184,42 @@ with st.sidebar:
         require_bring_back
     )
 
+    maximum_players_per_team = st.selectbox(
+        "Maximum players per team",
+        options=[
+            0,
+            3,
+            4,
+            5,
+        ],
+        index=[
+            0,
+            3,
+            4,
+            5,
+        ].index(
+            int(
+                st.session_state.get(
+                    "maximum_players_per_team",
+                    0,
+                )
+            )
+        ),
+        format_func=lambda team_limit: (
+            "No limit"
+            if team_limit == 0
+            else str(team_limit)
+        ),
+        help=(
+            "Limit the total number of players from any one NFL team "
+            "in each generated lineup."
+        ),
+    )
+
+    st.session_state.maximum_players_per_team = int(
+        maximum_players_per_team
+    )
+
 optimizer_settings = OptimizerSettings(
     salary_cap=int(salary_cap),
     minimum_salary=int(minimum_salary),
@@ -196,6 +232,9 @@ optimizer_settings = OptimizerSettings(
     ),
     require_bring_back=bool(
         require_bring_back
+    ),
+    maximum_players_per_team=int(
+        maximum_players_per_team
     ),
 )
 
@@ -478,6 +517,9 @@ if generate_clicked:
             "require_bring_back": bool(
                 optimizer_settings.require_bring_back
             ),
+            "maximum_players_per_team": int(
+                optimizer_settings.maximum_players_per_team
+            ),
         }
 
         st.session_state.saved_generated_lineups = {}
@@ -521,6 +563,9 @@ generated_settings = (
             "require_bring_back": bool(
                 require_bring_back
             ),
+            "maximum_players_per_team": int(
+                maximum_players_per_team
+            ),
         },
     )
 )
@@ -541,7 +586,7 @@ if generated_count < requested_lineup_count:
     st.warning(
         f"The optimizer generated {generated_count} of the "
         f"{requested_lineup_count} requested lineups. The current "
-        "salary, uniqueness, lock, exclusion, exposure, or stacking rules "
+        "salary, uniqueness, lock, exclusion, exposure, stacking, or team-limit rules "
         "prevented additional valid lineups."
     )
 else:

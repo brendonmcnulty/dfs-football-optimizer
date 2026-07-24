@@ -13,6 +13,7 @@ from optimizer.constraints import (
     add_position_constraints,
     add_qb_stack_constraints,
     add_salary_constraints,
+    add_team_limit_constraints,
     build_maximum_appearances,
     get_unavailable_player_ids,
     initialize_player_appearance_counts,
@@ -139,6 +140,7 @@ def _solve_lineup(
     unavailable_player_ids: set[str],
     qb_stack_size: int,
     require_bring_back: bool,
+    maximum_players_per_team: int,
 ) -> OptimizationResult:
     """Solve one lineup."""
 
@@ -186,6 +188,15 @@ def _solve_lineup(
         selected_player=selected_player,
         require_bring_back=bool(
             require_bring_back
+        ),
+    )
+
+    add_team_limit_constraints(
+        model=model,
+        pool=pool,
+        selected_player=selected_player,
+        maximum_players_per_team=int(
+            maximum_players_per_team
         ),
     )
 
@@ -284,6 +295,7 @@ def optimize_lineups(
     ) = None,
     qb_stack_size: int = 0,
     require_bring_back: bool = False,
+    maximum_players_per_team: int = 0,
 ) -> list[OptimizationResult]:
     """Generate multiple lineups with exposure and QB stacking."""
 
@@ -313,6 +325,11 @@ def optimize_lineups(
     if qb_stack_size not in {0, 1, 2}:
         raise ValueError(
             "QB stack size must be 0, 1, or 2."
+        )
+
+    if maximum_players_per_team not in {0, 3, 4, 5}:
+        raise ValueError(
+            "Maximum players per team must be 0, 3, 4, or 5."
         )
 
     pool = _prepare_players(players)
@@ -372,6 +389,9 @@ def optimize_lineups(
             require_bring_back=bool(
                 require_bring_back
             ),
+            maximum_players_per_team=int(
+                maximum_players_per_team
+            ),
         )
 
         if result.lineup.empty:
@@ -408,6 +428,7 @@ def optimize_lineup(
     solver_timeout_seconds: float = 15.0,
     qb_stack_size: int = 0,
     require_bring_back: bool = False,
+    maximum_players_per_team: int = 0,
 ) -> OptimizationResult:
     """Generate one optimized lineup."""
 
@@ -423,6 +444,9 @@ def optimize_lineup(
         qb_stack_size=int(qb_stack_size),
         require_bring_back=bool(
             require_bring_back
+        ),
+        maximum_players_per_team=int(
+            maximum_players_per_team
         ),
     )
 

@@ -24,6 +24,9 @@ from optimizer.constraints.salary import (
 from optimizer.constraints.stacks import (
     add_qb_stack_constraints,
 )
+from optimizer.constraints.team_limits import (
+    add_team_limit_constraints,
+)
 from optimizer.constraints.uniqueness import (
     add_lineup_uniqueness_constraints,
 )
@@ -35,6 +38,7 @@ __all__ = [
     "add_position_constraints",
     "add_qb_stack_constraints",
     "add_salary_constraints",
+    "add_team_limit_constraints",
     "build_maximum_appearances",
     "calculate_maximum_appearances",
     "eligible_roster_slots",

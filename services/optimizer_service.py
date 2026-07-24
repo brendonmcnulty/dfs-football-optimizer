@@ -446,13 +446,16 @@ class OptimizerService:
             require_bring_back=(
                 settings.require_bring_back
             ),
+            maximum_players_per_team=(
+                settings.maximum_players_per_team
+            ),
         )
 
         if not results:
             raise ValueError(
                 "The optimizer could not create a valid lineup. "
                 "Review salary, locks, exclusions, uniqueness, "
-                "maximum-exposure, QB-stack, and bring-back settings."
+                "maximum-exposure, QB-stack, bring-back, and team-limit settings."
             )
 
         return results
@@ -475,6 +478,9 @@ class OptimizerService:
             qb_stack_size=settings.qb_stack_size,
             require_bring_back=(
                 settings.require_bring_back
+            ),
+            maximum_players_per_team=(
+                settings.maximum_players_per_team
             ),
         )
 
