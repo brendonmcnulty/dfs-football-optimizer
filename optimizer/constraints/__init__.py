@@ -6,6 +6,9 @@ from optimizer.constraints.bring_back import (
 from optimizer.constraints.dst_correlation import (
     add_dst_correlation_constraints,
 )
+from optimizer.constraints.game_stacks import (
+    add_game_stack_constraints,
+)
 from optimizer.constraints.exposure import (
     build_maximum_appearances,
     calculate_maximum_appearances,
@@ -35,6 +38,7 @@ from optimizer.constraints.uniqueness import (
 )
 
 __all__ = [
+    "add_game_stack_constraints",
     "add_dst_correlation_constraints",
     "add_bring_back_constraints",
     "add_lineup_uniqueness_constraints",

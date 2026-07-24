@@ -253,6 +253,51 @@ with st.sidebar:
     st.session_state.block_dst_opposing_rb = block_opposing_rb
     st.session_state.block_dst_opposing_te = block_opposing_te
 
+    st.subheader("Game stacking")
+
+    minimum_players_from_primary_game = st.selectbox(
+        "Minimum players from primary game",
+        options=[None, 3, 4, 5],
+        index=[None, 3, 4, 5].index(
+            st.session_state.get(
+                "minimum_players_from_primary_game",
+                None,
+            )
+        ),
+        format_func=lambda value: (
+            "Off" if value is None else str(value)
+        ),
+        help=(
+            "Require at least one game to supply this many players "
+            "to every generated lineup."
+        ),
+    )
+
+    maximum_players_per_game = st.selectbox(
+        "Maximum players from one game",
+        options=[None, 5, 6],
+        index=[None, 5, 6].index(
+            st.session_state.get(
+                "maximum_players_per_game",
+                None,
+            )
+        ),
+        format_func=lambda value: (
+            "No limit" if value is None else str(value)
+        ),
+        help=(
+            "Limit the total players drawn from either side of the "
+            "same NFL game."
+        ),
+    )
+
+    st.session_state.minimum_players_from_primary_game = (
+        minimum_players_from_primary_game
+    )
+    st.session_state.maximum_players_per_game = (
+        maximum_players_per_game
+    )
+
 blocked_dst_opposing_positions = tuple(
     position
     for position, is_blocked in {
@@ -283,6 +328,10 @@ optimizer_settings = OptimizerSettings(
     blocked_dst_opposing_positions=(
         blocked_dst_opposing_positions
     ),
+    minimum_players_from_primary_game=(
+        minimum_players_from_primary_game
+    ),
+    maximum_players_per_game=maximum_players_per_game,
 )
 
 st.subheader("Player-pool summary")
@@ -570,6 +619,12 @@ if generate_clicked:
             "blocked_dst_opposing_positions": list(
                 optimizer_settings.blocked_dst_opposing_positions
             ),
+            "minimum_players_from_primary_game": (
+                optimizer_settings.minimum_players_from_primary_game
+            ),
+            "maximum_players_per_game": (
+                optimizer_settings.maximum_players_per_game
+            ),
         }
 
         st.session_state.saved_generated_lineups = {}
@@ -618,6 +673,12 @@ generated_settings = (
             ),
             "blocked_dst_opposing_positions": list(
                 blocked_dst_opposing_positions
+            ),
+            "minimum_players_from_primary_game": (
+                minimum_players_from_primary_game
+            ),
+            "maximum_players_per_game": (
+                maximum_players_per_game
             ),
         },
     )

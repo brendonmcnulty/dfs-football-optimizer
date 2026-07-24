@@ -9,6 +9,7 @@ from config import ROSTER_SLOTS, SALARY_CAP
 from optimizer.constraints import (
     add_bring_back_constraints,
     add_dst_correlation_constraints,
+    add_game_stack_constraints,
     add_lineup_uniqueness_constraints,
     add_player_availability_constraints,
     add_position_constraints,
@@ -143,6 +144,8 @@ def _solve_lineup(
     require_bring_back: bool,
     maximum_players_per_team: int | None,
     blocked_dst_opposing_positions: tuple[str, ...],
+    minimum_players_from_primary_game: int | None,
+    maximum_players_per_game: int | None,
 ) -> OptimizationResult:
     """Solve one lineup."""
 
@@ -205,6 +208,16 @@ def _solve_lineup(
         pool=pool,
         selected_player=selected_player,
         blocked_opposing_positions=blocked_dst_opposing_positions,
+    )
+
+    add_game_stack_constraints(
+        model=model,
+        pool=pool,
+        selected_player=selected_player,
+        minimum_players_from_primary_game=(
+            minimum_players_from_primary_game
+        ),
+        maximum_players_per_game=maximum_players_per_game,
     )
 
     projection_expression = sum(
@@ -304,6 +317,8 @@ def optimize_lineups(
     require_bring_back: bool = False,
     maximum_players_per_team: int | None = None,
     blocked_dst_opposing_positions: tuple[str, ...] = ("QB", "WR"),
+    minimum_players_from_primary_game: int | None = None,
+    maximum_players_per_game: int | None = None,
 ) -> list[OptimizationResult]:
     """Generate multiple lineups with exposure and QB stacking."""
 
@@ -333,6 +348,33 @@ def optimize_lineups(
     if qb_stack_size not in {0, 1, 2}:
         raise ValueError(
             "QB stack size must be 0, 1, or 2."
+        )
+
+    if (
+        minimum_players_from_primary_game is not None
+        and minimum_players_from_primary_game not in {3, 4, 5}
+    ):
+        raise ValueError(
+            "Minimum players from the primary game must be "
+            "3, 4, 5, or None."
+        )
+
+    if (
+        maximum_players_per_game is not None
+        and maximum_players_per_game not in {5, 6}
+    ):
+        raise ValueError(
+            "Maximum players per game must be 5, 6, or None."
+        )
+
+    if (
+        minimum_players_from_primary_game is not None
+        and maximum_players_per_game is not None
+        and minimum_players_from_primary_game > maximum_players_per_game
+    ):
+        raise ValueError(
+            "The primary-game minimum cannot exceed the maximum "
+            "players per game."
         )
 
     pool = _prepare_players(players)
@@ -396,6 +438,10 @@ def optimize_lineups(
             blocked_dst_opposing_positions=tuple(
                 blocked_dst_opposing_positions
             ),
+            minimum_players_from_primary_game=(
+                minimum_players_from_primary_game
+            ),
+            maximum_players_per_game=maximum_players_per_game,
         )
 
         if result.lineup.empty:
@@ -434,6 +480,8 @@ def optimize_lineup(
     require_bring_back: bool = False,
     maximum_players_per_team: int | None = None,
     blocked_dst_opposing_positions: tuple[str, ...] = ("QB", "WR"),
+    minimum_players_from_primary_game: int | None = None,
+    maximum_players_per_game: int | None = None,
 ) -> OptimizationResult:
     """Generate one optimized lineup."""
 
@@ -450,6 +498,14 @@ def optimize_lineup(
         require_bring_back=bool(
             require_bring_back
         ),
+        maximum_players_per_team=maximum_players_per_team,
+        blocked_dst_opposing_positions=tuple(
+            blocked_dst_opposing_positions
+        ),
+        minimum_players_from_primary_game=(
+            minimum_players_from_primary_game
+        ),
+        maximum_players_per_game=maximum_players_per_game,
     )
 
     if not results:

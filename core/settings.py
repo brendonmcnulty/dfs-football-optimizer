@@ -18,6 +18,8 @@ class OptimizerSettings:
     require_bring_back: bool = False
     maximum_players_per_team: int | None = None
     blocked_dst_opposing_positions: tuple[str, ...] = ("QB", "WR")
+    minimum_players_from_primary_game: int | None = None
+    maximum_players_per_game: int | None = None
 
     def validate(self) -> None:
         """Validate optimizer settings before they are used."""
@@ -96,6 +98,34 @@ class OptimizerSettings:
             raise ValueError(
                 "Unsupported DST correlation positions: "
                 f"{sorted(invalid_dst_positions)}"
+            )
+
+        if (
+            self.minimum_players_from_primary_game is not None
+            and self.minimum_players_from_primary_game not in {3, 4, 5}
+        ):
+            raise ValueError(
+                "Minimum players from the primary game must be "
+                "3, 4, 5, or None."
+            )
+
+        if (
+            self.maximum_players_per_game is not None
+            and self.maximum_players_per_game not in {5, 6}
+        ):
+            raise ValueError(
+                "Maximum players per game must be 5, 6, or None."
+            )
+
+        if (
+            self.minimum_players_from_primary_game is not None
+            and self.maximum_players_per_game is not None
+            and self.minimum_players_from_primary_game
+            > self.maximum_players_per_game
+        ):
+            raise ValueError(
+                "The primary-game minimum cannot exceed the "
+                "maximum players per game."
             )
 
     @property
