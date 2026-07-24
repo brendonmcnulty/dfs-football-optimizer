@@ -20,6 +20,7 @@ class OptimizerSettings:
     blocked_dst_opposing_positions: tuple[str, ...] = ("QB", "WR")
     minimum_players_from_primary_game: int | None = None
     maximum_players_per_game: int | None = None
+    maximum_total_ownership: float | None = None
 
     def validate(self) -> None:
         """Validate optimizer settings before they are used."""
@@ -126,6 +127,14 @@ class OptimizerSettings:
             raise ValueError(
                 "The primary-game minimum cannot exceed the "
                 "maximum players per game."
+            )
+
+        if (
+            self.maximum_total_ownership is not None
+            and self.maximum_total_ownership < 0
+        ):
+            raise ValueError(
+                "Maximum total ownership cannot be negative."
             )
 
     @property

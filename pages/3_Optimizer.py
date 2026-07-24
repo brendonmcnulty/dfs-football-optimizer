@@ -23,7 +23,7 @@ optimizer_service = OptimizerService()
 st.title("⚙️ Lineup Optimizer")
 st.caption(
     "Generate unique DraftKings NFL Classic lineups "
-    "with player exposure controls"
+    "with exposure, correlation, and ownership controls"
 )
 
 if "player_pool" not in st.session_state:
@@ -298,6 +298,50 @@ with st.sidebar:
         maximum_players_per_game
     )
 
+    st.subheader("Ownership")
+
+    limit_total_ownership = st.checkbox(
+        "Limit total projected ownership",
+        value=bool(
+            st.session_state.get(
+                "limit_total_ownership",
+                False,
+            )
+        ),
+        help=(
+            "Cap the sum of projected ownership percentages across "
+            "the nine selected players."
+        ),
+    )
+
+    maximum_total_ownership = None
+    if limit_total_ownership:
+        maximum_total_ownership = st.number_input(
+            "Maximum total ownership",
+            min_value=0.0,
+            max_value=900.0,
+            value=float(
+                st.session_state.get(
+                    "maximum_total_ownership",
+                    150.0,
+                )
+            ),
+            step=5.0,
+            format="%.1f",
+            help=(
+                "Example: 150 means the nine-player lineup may sum "
+                "to no more than 150% projected ownership."
+            ),
+        )
+
+    st.session_state.limit_total_ownership = bool(
+        limit_total_ownership
+    )
+    if maximum_total_ownership is not None:
+        st.session_state.maximum_total_ownership = float(
+            maximum_total_ownership
+        )
+
 blocked_dst_opposing_positions = tuple(
     position
     for position, is_blocked in {
@@ -332,6 +376,7 @@ optimizer_settings = OptimizerSettings(
         minimum_players_from_primary_game
     ),
     maximum_players_per_game=maximum_players_per_game,
+    maximum_total_ownership=maximum_total_ownership,
 )
 
 st.subheader("Player-pool summary")
@@ -380,6 +425,7 @@ with st.expander(
                 "opponent",
                 "salary",
                 "projection",
+                "ownership",
                 "locked",
                 "excluded",
             ]
@@ -404,6 +450,7 @@ default_exposure_table = players[
         "team",
         "salary",
         "projection",
+        "ownership",
         "locked",
         "excluded",
     ]
@@ -434,6 +481,7 @@ edited_exposure_table = st.data_editor(
         "team",
         "salary",
         "projection",
+        "ownership",
     ],
     column_config={
         "player_id": None,
@@ -453,6 +501,10 @@ edited_exposure_table = st.data_editor(
         "projection": st.column_config.NumberColumn(
             "Projection",
             format="%.2f",
+        ),
+        "ownership": st.column_config.NumberColumn(
+            "Ownership %",
+            format="%.1f%%",
         ),
         "locked": st.column_config.CheckboxColumn(
             "Locked",
@@ -633,6 +685,9 @@ if generate_clicked:
                 "total_projection": (
                     result.total_projection
                 ),
+                "total_ownership": (
+                    result.total_ownership
+                ),
                 "status": result.status,
             }
             for result in results
@@ -692,6 +747,9 @@ if generate_clicked:
             "maximum_players_per_game": (
                 optimizer_settings.maximum_players_per_game
             ),
+            "maximum_total_ownership": (
+                optimizer_settings.maximum_total_ownership
+            ),
         }
 
         st.session_state.saved_generated_lineups = {}
@@ -747,6 +805,9 @@ generated_settings = (
             "maximum_players_per_game": (
                 maximum_players_per_game
             ),
+            "maximum_total_ownership": (
+                maximum_total_ownership
+            ),
         },
     )
 )
@@ -796,6 +857,12 @@ for lineup_index, metadata in enumerate(
             "total_projection": float(
                 metadata["total_projection"]
             ),
+            "total_ownership": float(
+                metadata.get("total_ownership", 0.0)
+            ),
+            "average_ownership": float(
+                metadata.get("total_ownership", 0.0)
+            ) / 9.0,
             "status": str(
                 metadata["status"]
             ),
@@ -836,6 +903,14 @@ st.dataframe(
                 "Projection",
                 format="%.2f",
             )
+        ),
+        "total_ownership": st.column_config.NumberColumn(
+            "Total ownership",
+            format="%.1f%%",
+        ),
+        "average_ownership": st.column_config.NumberColumn(
+            "Average ownership",
+            format="%.1f%%",
         ),
         "status": st.column_config.TextColumn(
             "Status",

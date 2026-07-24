@@ -95,6 +95,7 @@ class SlateRepository:
             "opponent",
             "salary",
             "projection",
+            "ownership",
             "locked",
             "excluded",
         }
@@ -142,12 +143,13 @@ class SlateRepository:
                         opponent,
                         salary,
                         projection,
+                        ownership,
                         locked,
                         excluded,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(slate_id, external_player_id)
                     DO UPDATE SET
                         player_name = excluded.player_name,
@@ -156,6 +158,7 @@ class SlateRepository:
                         opponent = excluded.opponent,
                         salary = excluded.salary,
                         projection = excluded.projection,
+                        ownership = excluded.ownership,
                         locked = excluded.locked,
                         excluded = excluded.excluded,
                         updated_at = excluded.updated_at
@@ -169,6 +172,7 @@ class SlateRepository:
                         str(opponent),
                         int(player["salary"]),
                         float(player["projection"]),
+                        float(player["ownership"]),
                         int(bool(player["locked"])),
                         int(bool(player["excluded"])),
                         current_time,
@@ -222,6 +226,7 @@ class SlateRepository:
                     opponent,
                     salary,
                     projection,
+                    ownership,
                     locked,
                     excluded
                 FROM players

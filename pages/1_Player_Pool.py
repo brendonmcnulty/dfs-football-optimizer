@@ -129,7 +129,7 @@ st.write(f"**{active_slate_name}**")
 st.subheader("Players")
 
 st.write(
-    "Edit projections directly. Check **Lock** to force a player into every "
+    "Edit projections and projected ownership directly. Check **Lock** to force a player into every "
     "generated lineup or **Exclude** to remove the player from consideration."
 )
 
@@ -171,6 +171,14 @@ edited_players = st.data_editor(
             min_value=0.0,
             step=0.1,
             format="%.2f",
+        ),
+        "ownership": st.column_config.NumberColumn(
+            "Ownership %",
+            min_value=0.0,
+            max_value=100.0,
+            step=0.5,
+            format="%.1f%%",
+            help="Projected ownership percentage for this player.",
         ),
         "locked": st.column_config.CheckboxColumn(
             "Lock",

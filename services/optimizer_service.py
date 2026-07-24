@@ -20,6 +20,7 @@ class OptimizerService:
         "opponent",
         "salary",
         "projection",
+        "ownership",
         "locked",
         "excluded",
     }
@@ -132,6 +133,21 @@ class OptimizerService:
         if (projections < 0).any():
             raise ValueError(
                 "Player projections cannot be negative."
+            )
+
+        ownership = pd.to_numeric(
+            players["ownership"],
+            errors="coerce",
+        )
+
+        if ownership.isna().any():
+            raise ValueError(
+                "One or more players have invalid projected ownership."
+            )
+
+        if ((ownership < 0) | (ownership > 100)).any():
+            raise ValueError(
+                "Projected ownership must be between 0% and 100%."
             )
 
         locked = (
@@ -320,6 +336,11 @@ class OptimizerService:
 
         prepared["projection"] = pd.to_numeric(
             prepared["projection"],
+            errors="raise",
+        ).astype(float)
+
+        prepared["ownership"] = pd.to_numeric(
+            prepared["ownership"],
             errors="raise",
         ).astype(float)
 
@@ -512,6 +533,9 @@ class OptimizerService:
             maximum_players_per_game=(
                 settings.maximum_players_per_game
             ),
+            maximum_total_ownership=(
+                settings.maximum_total_ownership
+            ),
         )
 
         if not results:
@@ -554,6 +578,9 @@ class OptimizerService:
             ),
             maximum_players_per_game=(
                 settings.maximum_players_per_game
+            ),
+            maximum_total_ownership=(
+                settings.maximum_total_ownership
             ),
         )
 

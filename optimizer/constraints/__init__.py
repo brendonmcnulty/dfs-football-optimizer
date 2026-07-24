@@ -17,6 +17,9 @@ from optimizer.constraints.exposure import (
     normalize_player_exposures,
     record_player_appearances,
 )
+from optimizer.constraints.ownership import (
+    add_ownership_constraints,
+)
 from optimizer.constraints.locks import (
     add_player_availability_constraints,
 )
@@ -46,6 +49,7 @@ from optimizer.constraints.uniqueness import (
 )
 
 __all__ = [
+    "add_ownership_constraints",
     "add_unavailable_team_constraints",
     "build_team_maximum_appearances",
     "get_unavailable_teams",

@@ -11,6 +11,7 @@ from optimizer.constraints import (
     add_dst_correlation_constraints,
     add_game_stack_constraints,
     add_lineup_uniqueness_constraints,
+    add_ownership_constraints,
     add_player_availability_constraints,
     add_position_constraints,
     add_qb_stack_constraints,
@@ -35,6 +36,7 @@ class OptimizationResult:
     lineup: pd.DataFrame
     total_salary: int
     total_projection: float
+    total_ownership: float
     status: str
 
 
@@ -51,6 +53,7 @@ def _prepare_players(
         "opponent",
         "salary",
         "projection",
+        "ownership",
         "locked",
         "excluded",
     }
@@ -105,6 +108,11 @@ def _prepare_players(
         errors="raise",
     ).astype(float)
 
+    pool["ownership"] = pd.to_numeric(
+        pool["ownership"],
+        errors="raise",
+    ).astype(float)
+
     pool["locked"] = (
         pool["locked"]
         .fillna(False)
@@ -152,6 +160,7 @@ def _solve_lineup(
     blocked_dst_opposing_positions: tuple[str, ...],
     minimum_players_from_primary_game: int | None,
     maximum_players_per_game: int | None,
+    maximum_total_ownership: float | None,
 ) -> OptimizationResult:
     """Solve one lineup."""
 
@@ -233,6 +242,13 @@ def _solve_lineup(
         maximum_players_per_game=maximum_players_per_game,
     )
 
+    add_ownership_constraints(
+        model=model,
+        pool=pool,
+        selected_player=selected_player,
+        maximum_total_ownership=maximum_total_ownership,
+    )
+
     projection_expression = sum(
         int(
             round(
@@ -267,6 +283,7 @@ def _solve_lineup(
             lineup=pd.DataFrame(),
             total_salary=0,
             total_projection=0.0,
+            total_ownership=0.0,
             status=status_name,
         )
 
@@ -312,6 +329,9 @@ def _solve_lineup(
         total_projection=float(
             lineup["projection"].sum()
         ),
+        total_ownership=float(
+            lineup["ownership"].sum()
+        ),
         status=status_name,
     )
 
@@ -335,6 +355,7 @@ def optimize_lineups(
     blocked_dst_opposing_positions: tuple[str, ...] = ("QB", "WR"),
     minimum_players_from_primary_game: int | None = None,
     maximum_players_per_game: int | None = None,
+    maximum_total_ownership: float | None = None,
 ) -> list[OptimizationResult]:
     """Generate multiple lineups with exposure and QB stacking."""
 
@@ -474,6 +495,7 @@ def optimize_lineups(
                 minimum_players_from_primary_game
             ),
             maximum_players_per_game=maximum_players_per_game,
+            maximum_total_ownership=maximum_total_ownership,
         )
 
         if result.lineup.empty:
@@ -521,6 +543,7 @@ def optimize_lineup(
     blocked_dst_opposing_positions: tuple[str, ...] = ("QB", "WR"),
     minimum_players_from_primary_game: int | None = None,
     maximum_players_per_game: int | None = None,
+    maximum_total_ownership: float | None = None,
 ) -> OptimizationResult:
     """Generate one optimized lineup."""
 
@@ -545,6 +568,7 @@ def optimize_lineup(
             minimum_players_from_primary_game
         ),
         maximum_players_per_game=maximum_players_per_game,
+        maximum_total_ownership=maximum_total_ownership,
     )
 
     if not results:
@@ -552,6 +576,7 @@ def optimize_lineup(
             lineup=pd.DataFrame(),
             total_salary=0,
             total_projection=0.0,
+            total_ownership=0.0,
             status="INFEASIBLE",
         )
 

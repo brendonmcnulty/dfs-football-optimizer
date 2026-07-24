@@ -75,6 +75,7 @@ class DatabaseManager:
                     opponent TEXT,
                     salary INTEGER NOT NULL,
                     projection REAL NOT NULL DEFAULT 0,
+                    ownership REAL NOT NULL DEFAULT 0,
                     locked INTEGER NOT NULL DEFAULT 0,
                     excluded INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
@@ -127,6 +128,19 @@ class DatabaseManager:
                 )
                 """
             )
+
+            player_columns = {
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA table_info(players)"
+                ).fetchall()
+            }
+
+            if "ownership" not in player_columns:
+                connection.execute(
+                    "ALTER TABLE players "
+                    "ADD COLUMN ownership REAL NOT NULL DEFAULT 0"
+                )
 
             connection.execute(
                 """

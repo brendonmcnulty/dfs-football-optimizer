@@ -13,6 +13,14 @@ COLUMN_ALIASES = {
     "opponent": ["opponent", "Opponent", "opp", "Opp"],
     "salary": ["salary", "Salary"],
     "projection": ["projection", "Projection", "proj", "Proj", "fpts", "FPTS"],
+    "ownership": [
+        "ownership",
+        "Ownership",
+        "ownership_pct",
+        "Ownership %",
+        "Projected Ownership",
+        "projected_ownership",
+    ],
 }
 
 
@@ -75,9 +83,20 @@ def normalize_player_pool(frame: pd.DataFrame) -> pd.DataFrame:
     if "projection" not in output:
         output["projection"] = 0.0
 
+    if "ownership" not in output:
+        output["ownership"] = 0.0
+
     output["projection"] = pd.to_numeric(
         output["projection"], errors="coerce"
     ).fillna(0.0)
+
+    output["ownership"] = pd.to_numeric(
+        output["ownership"], errors="coerce"
+    ).fillna(0.0)
+    output["ownership"] = output["ownership"].clip(
+        lower=0.0,
+        upper=100.0,
+    )
 
     output = output.dropna(subset=["salary"]).copy()
     output["salary"] = output["salary"].astype(int)
@@ -93,6 +112,7 @@ def normalize_player_pool(frame: pd.DataFrame) -> pd.DataFrame:
             "opponent",
             "salary",
             "projection",
+            "ownership",
             "locked",
             "excluded",
         ]
@@ -117,18 +137,43 @@ def merge_projections(
             "projection column."
         )
 
-    projection_table = projections[[name_column, projection_column]].copy()
-    projection_table.columns = ["name", "uploaded_projection"]
+    ownership_column = _find_column(
+        projection_columns, COLUMN_ALIASES["ownership"]
+    )
+
+    selected_columns = [name_column, projection_column]
+    if ownership_column is not None:
+        selected_columns.append(ownership_column)
+
+    projection_table = projections[selected_columns].copy()
+    projection_table.columns = [
+        "name",
+        "uploaded_projection",
+        *(["uploaded_ownership"] if ownership_column is not None else []),
+    ]
     projection_table["name"] = projection_table["name"].map(_clean_name)
     projection_table["uploaded_projection"] = pd.to_numeric(
         projection_table["uploaded_projection"], errors="coerce"
     )
 
-    merged = player_pool.drop(columns=["projection"]).merge(
+    columns_to_drop = ["projection"]
+    if ownership_column is not None and "ownership" in player_pool.columns:
+        columns_to_drop.append("ownership")
+
+    merged = player_pool.drop(columns=columns_to_drop).merge(
         projection_table,
         on="name",
         how="left",
     )
     merged["projection"] = merged["uploaded_projection"].fillna(0.0)
     merged = merged.drop(columns=["uploaded_projection"])
+
+    if ownership_column is not None:
+        merged["ownership"] = pd.to_numeric(
+            merged["uploaded_ownership"], errors="coerce"
+        ).fillna(0.0).clip(lower=0.0, upper=100.0)
+        merged = merged.drop(columns=["uploaded_ownership"])
+    elif "ownership" not in merged.columns:
+        merged["ownership"] = 0.0
+
     return merged
