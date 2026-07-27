@@ -11,6 +11,7 @@ from repositories import (
     HistoricalRepository,
     LineupRepository,
     SlateRepository,
+    WarehouseRepository,
 )
 
 
@@ -55,6 +56,10 @@ class DatabaseManager:
         )
 
         self.historical_repository = HistoricalRepository(
+            database_path=self.database_path,
+        )
+
+        self.warehouse_repository = WarehouseRepository(
             database_path=self.database_path,
         )
 
@@ -172,6 +177,60 @@ class DatabaseManager:
 
             connection.execute(
                 """
+                CREATE TABLE IF NOT EXISTS warehouse_player_weeks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    slate_id INTEGER NOT NULL,
+                    season INTEGER NOT NULL,
+                    week INTEGER NOT NULL,
+                    site TEXT NOT NULL,
+                    slate_name TEXT NOT NULL,
+                    external_player_id TEXT NOT NULL,
+                    player_name TEXT NOT NULL,
+                    position TEXT NOT NULL,
+                    team TEXT NOT NULL,
+                    opponent TEXT,
+                    salary INTEGER NOT NULL,
+                    projection REAL NOT NULL DEFAULT 0,
+                    ceiling REAL NOT NULL DEFAULT 0,
+                    floor REAL NOT NULL DEFAULT 0,
+                    ownership REAL NOT NULL DEFAULT 0,
+                    confidence REAL NOT NULL DEFAULT 0,
+                    actual_points REAL,
+                    is_home INTEGER,
+                    game_total REAL,
+                    team_implied_total REAL,
+                    opponent_implied_total REAL,
+                    team_spread REAL,
+                    targets REAL,
+                    carries REAL,
+                    snaps REAL,
+                    routes REAL,
+                    red_zone_touches REAL,
+                    weather_temperature REAL,
+                    weather_wind_speed REAL,
+                    weather_precipitation_probability REAL,
+                    injury_status TEXT,
+                    synced_at TEXT NOT NULL,
+                    FOREIGN KEY (slate_id) REFERENCES slates(id) ON DELETE CASCADE,
+                    UNIQUE(slate_id, external_player_id)
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS warehouse_import_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    slate_id INTEGER NOT NULL,
+                    player_count INTEGER NOT NULL,
+                    synced_at TEXT NOT NULL,
+                    FOREIGN KEY (slate_id) REFERENCES slates(id) ON DELETE CASCADE
+                )
+                """
+            )
+
+            connection.execute(
+                """
                 CREATE TABLE IF NOT EXISTS historical_results (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     slate_id INTEGER NOT NULL,
@@ -264,6 +323,28 @@ class DatabaseManager:
                 """
                 CREATE INDEX IF NOT EXISTS idx_lineup_players_lineup_id
                 ON lineup_players(lineup_id)
+                """
+            )
+
+
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_warehouse_season_week
+                ON warehouse_player_weeks(season, week)
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_warehouse_player
+                ON warehouse_player_weeks(external_player_id)
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_warehouse_position_salary
+                ON warehouse_player_weeks(position, salary)
                 """
             )
 
@@ -430,3 +511,12 @@ class DatabaseManager:
 
     def load_historical_evaluation(self, slate_id: int) -> pd.DataFrame:
         return self.historical_repository.load_evaluation(slate_id)
+
+    def sync_historical_slate_to_warehouse(self, slate_id: int) -> int:
+        """Upsert one saved slate into the historical DFS warehouse."""
+        return self.warehouse_repository.sync_slate(slate_id)
+
+    def sync_all_slates_to_warehouse(self) -> tuple[int, int]:
+        """Sync every saved slate into the historical DFS warehouse."""
+        return self.warehouse_repository.sync_all_slates()
+

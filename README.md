@@ -154,3 +154,17 @@ correlation, floor/ceiling coverage, and accuracy by position, salary tier, and
 confidence tier. It also compares the current projection with a transparent
 salary-only baseline and provides position-level additive calibration ideas for
 future model tests.
+
+## Historical DFS Warehouse v2.0
+
+The **Historical DFS Warehouse** page consolidates every saved slate into a
+cross-season player-week dataset. Re-running a sync updates existing rows rather
+than creating duplicates. The warehouse currently stores salaries, model
+projections, ceiling, floor, ownership, confidence, actual DraftKings points,
+and available Vegas context.
+
+The schema also reserves stable columns for targets, carries, snaps, routes,
+red-zone touches, weather, and injury status. Future connectors will populate
+those fields without requiring the backtester or research tools to be redesigned.
+The warehouse page supports season, week, position, team, salary, and actual-result
+filters plus CSV export for external analysis.
