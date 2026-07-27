@@ -98,8 +98,14 @@ st.markdown(
 
     ### 7. Historical Slates
 
-    Import past DraftKings slates and actual results, reload them for optimizer
-    testing, and measure projection accuracy.
+    Import past DraftKings slates and actual results and reload them for optimizer
+    testing.
+
+    ### 8. Projection Backtester
+
+    Compare saved projections with actual fantasy points, benchmark them against
+    a salary-only baseline, and review calibration by position, salary, and
+    confidence tier.
     """
 )
 

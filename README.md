@@ -145,3 +145,12 @@ page reveals the in-house projection engine.
 ## Historical Slate Manager
 
 The Historical Slates page imports past DraftKings salary files, optional historical projections, and optional actual fantasy results. Saved historical slates can be loaded into the optimizer and evaluated with MAE, RMSE, bias, correlation, and floor-to-ceiling coverage.
+
+## Projection Backtester v1.7
+
+The Projection Backtester evaluates any saved historical slate that has matched
+actual DraftKings fantasy results. It reports overall MAE, RMSE, bias,
+correlation, floor/ceiling coverage, and accuracy by position, salary tier, and
+confidence tier. It also compares the current projection with a transparent
+salary-only baseline and provides position-level additive calibration ideas for
+future model tests.
