@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from statistics import mean
 from typing import Any
@@ -170,6 +170,49 @@ class OddsApiService:
             'away_moneyline': round(mean(away_moneylines), 0) if away_moneylines else None,
             'bookmaker_count': int(len(event.get('bookmakers', []))),
         }
+
+
+def nfl_week_bounds(season: int, week: int) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Return approximate UTC boundaries for an NFL regular-season week.
+
+    Week 1 begins with the league-opening window immediately after Labor Day.
+    Subsequent weeks use seven-day windows. This keeps The Odds API response
+    scoped to the selected week before games are displayed or cached.
+    """
+    season = int(season)
+    week = int(week)
+    if week < 1 or week > 22:
+        raise ValueError("NFL week must be between 1 and 22.")
+
+    september_first = datetime(season, 9, 1, tzinfo=timezone.utc)
+    days_until_monday = (7 - september_first.weekday()) % 7
+    labor_day = september_first + timedelta(days=days_until_monday)
+
+    # Include the opening game even when its UTC timestamp falls just before
+    # the nominal Thursday boundary. The one-day buffer also handles schedule
+    # feeds that label the opener by local calendar date.
+    week_one_start = labor_day + timedelta(days=2)
+    start = week_one_start + timedelta(days=7 * (week - 1))
+    end = start + timedelta(days=7)
+    return pd.Timestamp(start), pd.Timestamp(end)
+
+
+def filter_games_for_week(
+    games: pd.DataFrame,
+    season: int,
+    week: int,
+) -> pd.DataFrame:
+    """Return only games whose kickoff falls in the selected NFL week."""
+    if games.empty:
+        return games.copy()
+    if "commence_time" not in games.columns:
+        raise ValueError("Vegas games are missing the commence_time column.")
+
+    start, end = nfl_week_bounds(season, week)
+    kickoff = pd.to_datetime(games["commence_time"], utc=True, errors="coerce")
+    mask = kickoff.ge(start) & kickoff.lt(end)
+    filtered = games.loc[mask].copy()
+    return filtered.sort_values("commence_time").reset_index(drop=True)
 
 
 def enrich_player_pool_with_vegas(player_pool: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:

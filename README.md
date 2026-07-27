@@ -128,3 +128,20 @@ confidence score.
 This first model is intentionally transparent and deterministic. It does not
 yet claim to use historical usage, injuries, weather, or matchup statistics;
 those inputs will be added as their data services are implemented.
+
+## Weekly Update workflow
+
+The Weekly Update page can now start from one of three player-pool foundations:
+
+- A current DraftKings salary CSV
+- The active Player Pool already loaded in the app
+- The included sample player pool for offseason testing
+
+Vegas results are filtered to the selected season/week before they are displayed,
+cached, or merged into players. After a player-pool foundation is selected, the
+page reveals the in-house projection engine.
+
+
+## Historical Slate Manager
+
+The Historical Slates page imports past DraftKings salary files, optional historical projections, and optional actual fantasy results. Saved historical slates can be loaded into the optimizer and evaluated with MAE, RMSE, bias, correlation, and floor-to-ceiling coverage.

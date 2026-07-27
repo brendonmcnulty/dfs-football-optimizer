@@ -8,6 +8,7 @@ from database.connection import create_connection
 from repositories import (
     DataUpdateRepository,
     GameRepository,
+    HistoricalRepository,
     LineupRepository,
     SlateRepository,
 )
@@ -50,6 +51,10 @@ class DatabaseManager:
         )
 
         self.game_repository = GameRepository(
+            database_path=self.database_path,
+        )
+
+        self.historical_repository = HistoricalRepository(
             database_path=self.database_path,
         )
 
@@ -161,6 +166,22 @@ class DatabaseManager:
                     bookmaker_count INTEGER NOT NULL DEFAULT 0,
                     fetched_at TEXT NOT NULL,
                     UNIQUE(season, week, event_id)
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS historical_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    slate_id INTEGER NOT NULL,
+                    external_player_id TEXT NOT NULL,
+                    player_name TEXT NOT NULL,
+                    team TEXT NOT NULL,
+                    actual_points REAL NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (slate_id) REFERENCES slates(id) ON DELETE CASCADE,
+                    UNIQUE(slate_id, external_player_id)
                 )
                 """
             )
@@ -400,3 +421,12 @@ class DatabaseManager:
     def load_games(self, season: int, week: int) -> pd.DataFrame:
         """Load cached Vegas games for one NFL week."""
         return self.game_repository.load_games(season=season, week=week)
+
+    def save_historical_results(self, slate_id: int, results: pd.DataFrame) -> int:
+        return self.historical_repository.save_results(slate_id, results)
+
+    def load_historical_results(self, slate_id: int) -> pd.DataFrame:
+        return self.historical_repository.load_results(slate_id)
+
+    def load_historical_evaluation(self, slate_id: int) -> pd.DataFrame:
+        return self.historical_repository.load_evaluation(slate_id)

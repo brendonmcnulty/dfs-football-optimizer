@@ -95,6 +95,11 @@ st.markdown(
     ### 6. Settings
 
     Store and test local API credentials without committing them to Git.
+
+    ### 7. Historical Slates
+
+    Import past DraftKings slates and actual results, reload them for optimizer
+    testing, and measure projection accuracy.
     """
 )
 
