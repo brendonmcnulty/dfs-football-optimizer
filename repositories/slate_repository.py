@@ -148,12 +148,13 @@ class SlateRepository:
                         ceiling,
                         floor,
                         ownership,
+                        confidence,
                         locked,
                         excluded,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(slate_id, external_player_id)
                     DO UPDATE SET
                         player_name = excluded.player_name,
@@ -165,6 +166,7 @@ class SlateRepository:
                         ceiling = excluded.ceiling,
                         floor = excluded.floor,
                         ownership = excluded.ownership,
+                        confidence = excluded.confidence,
                         locked = excluded.locked,
                         excluded = excluded.excluded,
                         updated_at = excluded.updated_at
@@ -181,6 +183,7 @@ class SlateRepository:
                         float(player["ceiling"]),
                         float(player["floor"]),
                         float(player["ownership"]),
+                        float(player.get("confidence", 0.0)),
                         int(bool(player["locked"])),
                         int(bool(player["excluded"])),
                         current_time,
@@ -237,6 +240,7 @@ class SlateRepository:
                     ceiling,
                     floor,
                     ownership,
+                    confidence,
                     locked,
                     excluded
                 FROM players

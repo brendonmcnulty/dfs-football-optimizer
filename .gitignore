@@ -22,3 +22,7 @@ logs/
 # OS files
 Thumbs.db
 .DS_Store
+# Local API keys and secrets
+.env
+.env.*
+!.env.example

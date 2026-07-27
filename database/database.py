@@ -5,7 +5,12 @@ from pathlib import Path
 import pandas as pd
 
 from database.connection import create_connection
-from repositories import LineupRepository, SlateRepository
+from repositories import (
+    DataUpdateRepository,
+    GameRepository,
+    LineupRepository,
+    SlateRepository,
+)
 
 
 DATABASE_PATH = Path("data") / "dfs_optimizer.db"
@@ -37,6 +42,14 @@ class DatabaseManager:
         )
 
         self.lineup_repository = LineupRepository(
+            database_path=self.database_path,
+        )
+
+        self.data_update_repository = DataUpdateRepository(
+            database_path=self.database_path,
+        )
+
+        self.game_repository = GameRepository(
             database_path=self.database_path,
         )
 
@@ -78,6 +91,7 @@ class DatabaseManager:
                     ceiling REAL NOT NULL DEFAULT 0,
                     floor REAL NOT NULL DEFAULT 0,
                     ownership REAL NOT NULL DEFAULT 0,
+                    confidence REAL NOT NULL DEFAULT 0,
                     locked INTEGER NOT NULL DEFAULT 0,
                     excluded INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
@@ -105,6 +119,48 @@ class DatabaseManager:
                     FOREIGN KEY (slate_id)
                         REFERENCES slates(id)
                         ON DELETE CASCADE
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS data_updates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    season INTEGER NOT NULL,
+                    week INTEGER NOT NULL,
+                    site TEXT NOT NULL,
+                    slate_name TEXT NOT NULL,
+                    player_count INTEGER NOT NULL,
+                    source_names TEXT NOT NULL,
+                    aggregation TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS games (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    season INTEGER NOT NULL,
+                    week INTEGER NOT NULL,
+                    event_id TEXT NOT NULL,
+                    commence_time TEXT NOT NULL,
+                    home_team TEXT NOT NULL,
+                    away_team TEXT NOT NULL,
+                    home_team_name TEXT NOT NULL,
+                    away_team_name TEXT NOT NULL,
+                    home_spread REAL,
+                    game_total REAL,
+                    home_implied_total REAL,
+                    away_implied_total REAL,
+                    home_moneyline REAL,
+                    away_moneyline REAL,
+                    bookmaker_count INTEGER NOT NULL DEFAULT 0,
+                    fetched_at TEXT NOT NULL,
+                    UNIQUE(season, week, event_id)
                 )
                 """
             )
@@ -154,6 +210,12 @@ class DatabaseManager:
                 connection.execute(
                     "ALTER TABLE players "
                     "ADD COLUMN ownership REAL NOT NULL DEFAULT 0"
+                )
+
+            if "confidence" not in player_columns:
+                connection.execute(
+                    "ALTER TABLE players "
+                    "ADD COLUMN confidence REAL NOT NULL DEFAULT 0"
                 )
 
             connection.execute(
@@ -292,3 +354,49 @@ class DatabaseManager:
         return self.lineup_repository.delete_lineup(
             lineup_id=lineup_id,
         )
+
+    def record_data_update(
+        self,
+        season: int,
+        week: int,
+        site: str,
+        slate_name: str,
+        player_count: int,
+        source_names: list[str],
+        aggregation: str,
+    ) -> int:
+        """Record one successful weekly data-pipeline run."""
+
+        return self.data_update_repository.record_update(
+            season=season,
+            week=week,
+            site=site,
+            slate_name=slate_name,
+            player_count=player_count,
+            source_names=source_names,
+            aggregation=aggregation,
+        )
+
+    def list_data_updates(self, limit: int = 25) -> pd.DataFrame:
+        """Return recent weekly data-pipeline runs."""
+
+        return self.data_update_repository.list_updates(limit=limit)
+
+    def save_games(
+        self,
+        season: int,
+        week: int,
+        games: pd.DataFrame,
+        fetched_at: str,
+    ) -> int:
+        """Replace cached Vegas games for one NFL week."""
+        return self.game_repository.replace_games(
+            season=season,
+            week=week,
+            games=games,
+            fetched_at=fetched_at,
+        )
+
+    def load_games(self, season: int, week: int) -> pd.DataFrame:
+        """Load cached Vegas games for one NFL week."""
+        return self.game_repository.load_games(season=season, week=week)

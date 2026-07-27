@@ -22,7 +22,7 @@ st.caption("DraftKings NFL Classic analytics and lineup optimization")
 st.markdown(
     """
     Use the sidebar navigation to import player pools, manage saved slates,
-    generate optimized lineups, and review previously saved lineups.
+    run weekly data updates, generate optimized lineups, and review saved lineups.
     """
 )
 
@@ -85,6 +85,16 @@ st.markdown(
 
     Review lineups stored in SQLite, inspect every roster spot, and download
     previously generated lineups as CSV files.
+
+    ### 5. Weekly Update
+
+    Combine the DraftKings salary file with projection providers and live
+    Vegas markets, then generate transparent in-house projection, ceiling,
+    floor, and confidence values before activating or saving the pool.
+
+    ### 6. Settings
+
+    Store and test local API credentials without committing them to Git.
     """
 )
 

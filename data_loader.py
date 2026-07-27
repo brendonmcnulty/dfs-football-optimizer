@@ -98,6 +98,11 @@ def normalize_player_pool(frame: pd.DataFrame) -> pd.DataFrame:
     output["ceiling"] = pd.to_numeric(output["ceiling"], errors="coerce").fillna(output["projection"])
     output["floor"] = pd.to_numeric(output["floor"], errors="coerce").fillna(output["projection"])
     output["ownership"] = pd.to_numeric(output["ownership"], errors="coerce").fillna(0.0).clip(0.0, 100.0)
+    if "confidence" not in output:
+        output["confidence"] = 0.0
+    output["confidence"] = pd.to_numeric(
+        output["confidence"], errors="coerce"
+    ).fillna(0.0).clip(0.0, 100.0)
 
     output = output.dropna(subset=["salary"]).copy()
     output["salary"] = output["salary"].astype(int)
@@ -108,7 +113,7 @@ def normalize_player_pool(frame: pd.DataFrame) -> pd.DataFrame:
     return output[[
         "player_id", "name", "position", "team", "opponent", "salary",
         "projection", "ceiling", "floor", "value", "ownership", "leverage",
-        "locked", "excluded",
+        "confidence", "locked", "excluded",
     ]].reset_index(drop=True)
 
 

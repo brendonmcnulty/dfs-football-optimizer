@@ -1,0 +1,162 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import pandas as pd
+
+from data_loader import add_derived_metrics
+
+
+POSITION_SALARY_MULTIPLIERS = {
+    "QB": 3.25,
+    "RB": 2.45,
+    "WR": 2.35,
+    "TE": 2.15,
+    "DST": 1.35,
+}
+
+POSITION_VOLATILITY = {
+    "QB": 0.38,
+    "RB": 0.52,
+    "WR": 0.62,
+    "TE": 0.58,
+    "DST": 0.72,
+}
+
+VEGAS_SENSITIVITY = {
+    "QB": 0.16,
+    "RB": 0.18,
+    "WR": 0.14,
+    "TE": 0.11,
+    "DST": 0.09,
+}
+
+
+@dataclass(frozen=True)
+class ProjectionEngineResult:
+    player_pool: pd.DataFrame
+    summary: pd.DataFrame
+
+
+class ProjectionEngine:
+    """Create transparent rule-based NFL DFS projections.
+
+    Version 1.5 intentionally uses only information already present in the
+    weekly player pool: salary, optional imported projections, position,
+    opponent, home/away status, spread, and implied team total. The engine is
+    deterministic and exposes every adjustment it applies.
+    """
+
+    def project(self, players: pd.DataFrame) -> ProjectionEngineResult:
+        required = {"name", "position", "team", "salary", "projection"}
+        missing = required - set(players.columns)
+        if missing:
+            raise ValueError(
+                "Projection engine is missing required columns: "
+                f"{sorted(missing)}"
+            )
+
+        output = players.copy().reset_index(drop=True)
+        output["position"] = output["position"].astype(str).str.upper().str.strip()
+        output["salary"] = pd.to_numeric(output["salary"], errors="coerce")
+        if output["salary"].isna().any():
+            raise ValueError("Every player needs a valid salary.")
+
+        imported_projection = pd.to_numeric(
+            output["projection"], errors="coerce"
+        ).fillna(0.0)
+        salary_baseline = (
+            output["salary"] / 1000.0
+            * output["position"].map(POSITION_SALARY_MULTIPLIERS).fillna(2.0)
+        )
+        has_imported_projection = imported_projection > 0
+        output["base_projection"] = imported_projection.where(
+            has_imported_projection, salary_baseline
+        )
+        output["projection_source"] = has_imported_projection.map(
+            {True: "Imported projection", False: "Salary baseline"}
+        )
+
+        team_total = pd.to_numeric(
+            output.get("team_implied_total", pd.Series(index=output.index, dtype=float)),
+            errors="coerce",
+        )
+        total_delta = (team_total - 22.5).clip(lower=-10.0, upper=10.0)
+        output["vegas_adjustment"] = (
+            total_delta
+            * output["position"].map(VEGAS_SENSITIVITY).fillna(0.10)
+        ).fillna(0.0)
+
+        is_home = output.get("is_home", pd.Series(False, index=output.index))
+        is_home = is_home.fillna(False).astype(bool)
+        home_bonus = output["position"].map(
+            {"QB": 0.20, "RB": 0.25, "WR": 0.15, "TE": 0.12, "DST": 0.35}
+        ).fillna(0.10)
+        output["home_adjustment"] = home_bonus.where(is_home, 0.0)
+
+        spread = pd.to_numeric(
+            output.get("team_spread", pd.Series(index=output.index, dtype=float)),
+            errors="coerce",
+        ).clip(lower=-14.0, upper=14.0)
+        position = output["position"]
+        spread_adjustment = pd.Series(0.0, index=output.index)
+        spread_adjustment.loc[position == "RB"] = (
+            -spread.loc[position == "RB"] * 0.055
+        )
+        spread_adjustment.loc[position.isin(["QB", "WR", "TE"])] = (
+            spread.loc[position.isin(["QB", "WR", "TE"])] * 0.025
+        )
+        spread_adjustment.loc[position == "DST"] = (
+            -spread.loc[position == "DST"] * 0.070
+        )
+        output["spread_adjustment"] = spread_adjustment.fillna(0.0)
+
+        output["model_adjustment"] = (
+            output["vegas_adjustment"]
+            + output["home_adjustment"]
+            + output["spread_adjustment"]
+        )
+        output["projection"] = (
+            output["base_projection"] + output["model_adjustment"]
+        ).clip(lower=0.0)
+
+        confidence = pd.Series(30.0, index=output.index)
+        confidence += has_imported_projection.astype(float) * 30.0
+        confidence += team_total.notna().astype(float) * 15.0
+        confidence += spread.notna().astype(float) * 5.0
+        if "opponent" in output.columns:
+            confidence += (
+                output["opponent"].fillna("").astype(str).str.strip().ne("")
+            ).astype(float) * 5.0
+        output["confidence"] = confidence.clip(lower=20.0, upper=95.0)
+
+        volatility = output["position"].map(POSITION_VOLATILITY).fillna(0.55)
+        uncertainty = 1.0 + (100.0 - output["confidence"]) / 180.0
+        output["ceiling"] = (
+            output["projection"] * (1.0 + volatility * uncertainty)
+        ).clip(lower=output["projection"])
+        output["floor"] = (
+            output["projection"] * (1.0 - volatility * 0.62 * uncertainty)
+        ).clip(lower=0.0, upper=output["projection"])
+
+        round_columns = [
+            "base_projection", "vegas_adjustment", "home_adjustment",
+            "spread_adjustment", "model_adjustment", "projection", "ceiling",
+            "floor", "confidence",
+        ]
+        output[round_columns] = output[round_columns].round(2)
+        output = add_derived_metrics(output)
+
+        summary = pd.DataFrame(
+            [
+                {
+                    "Players": len(output),
+                    "Imported bases": int(has_imported_projection.sum()),
+                    "Salary baselines": int((~has_imported_projection).sum()),
+                    "Vegas covered": int(team_total.notna().sum()),
+                    "Average projection": round(float(output["projection"].mean()), 2),
+                    "Average confidence": round(float(output["confidence"].mean()), 1),
+                }
+            ]
+        )
+        return ProjectionEngineResult(player_pool=output, summary=summary)
