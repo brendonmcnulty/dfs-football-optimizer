@@ -23,6 +23,22 @@ POSITION_VOLATILITY = {
     "DST": 0.72,
 }
 
+USAGE_OPPORTUNITY_BASELINES = {
+    "QB": 34.0,
+    "RB": 16.0,
+    "WR": 14.0,
+    "TE": 10.0,
+    "DST": 0.0,
+}
+
+USAGE_ADJUSTMENT_SENSITIVITY = {
+    "QB": 0.085,
+    "RB": 0.13,
+    "WR": 0.12,
+    "TE": 0.11,
+    "DST": 0.0,
+}
+
 VEGAS_SENSITIVITY = {
     "QB": 0.16,
     "RB": 0.18,
@@ -43,7 +59,8 @@ class ProjectionEngine:
 
     Version 1.5 intentionally uses only information already present in the
     weekly player pool: salary, optional imported projections, position,
-    opponent, home/away status, spread, and implied team total. The engine is
+    opponent, home/away status, spread, implied team total, and leak-free
+    recent usage from completed prior weeks. The engine is
     deterministic and exposes every adjustment it applies.
     """
 
@@ -111,10 +128,52 @@ class ProjectionEngine:
         )
         output["spread_adjustment"] = spread_adjustment.fillna(0.0)
 
+        passing_attempts = pd.to_numeric(
+            output.get("passing_attempts", pd.Series(index=output.index, dtype=float)),
+            errors="coerce",
+        )
+        carries = pd.to_numeric(
+            output.get("carries", pd.Series(index=output.index, dtype=float)),
+            errors="coerce",
+        )
+        targets = pd.to_numeric(
+            output.get("targets", pd.Series(index=output.index, dtype=float)),
+            errors="coerce",
+        )
+        usage_games = pd.to_numeric(
+            output.get("usage_games", pd.Series(0, index=output.index)),
+            errors="coerce",
+        ).fillna(0.0)
+
+        opportunity = pd.Series(0.0, index=output.index)
+        opportunity.loc[position == "QB"] = (
+            passing_attempts.loc[position == "QB"].fillna(0.0)
+            + carries.loc[position == "QB"].fillna(0.0) * 1.5
+        )
+        opportunity.loc[position == "RB"] = (
+            carries.loc[position == "RB"].fillna(0.0)
+            + targets.loc[position == "RB"].fillna(0.0) * 1.5
+        )
+        opportunity.loc[position.isin(["WR", "TE"])] = (
+            targets.loc[position.isin(["WR", "TE"])] * 2.0
+        ).fillna(0.0)
+        output["usage_opportunity"] = opportunity
+
+        usage_delta = (
+            opportunity
+            - position.map(USAGE_OPPORTUNITY_BASELINES).fillna(0.0)
+        )
+        usage_adjustment = (
+            usage_delta
+            * position.map(USAGE_ADJUSTMENT_SENSITIVITY).fillna(0.0)
+        ).clip(lower=-3.0, upper=3.0)
+        output["usage_adjustment"] = usage_adjustment.where(usage_games > 0, 0.0)
+
         output["model_adjustment"] = (
             output["vegas_adjustment"]
             + output["home_adjustment"]
             + output["spread_adjustment"]
+            + output["usage_adjustment"]
         )
         output["projection"] = (
             output["base_projection"] + output["model_adjustment"]
@@ -124,6 +183,8 @@ class ProjectionEngine:
         confidence += has_imported_projection.astype(float) * 30.0
         confidence += team_total.notna().astype(float) * 15.0
         confidence += spread.notna().astype(float) * 5.0
+        confidence += usage_games.gt(0).astype(float) * 10.0
+        confidence += usage_games.ge(3).astype(float) * 5.0
         if "opponent" in output.columns:
             confidence += (
                 output["opponent"].fillna("").astype(str).str.strip().ne("")
@@ -141,7 +202,8 @@ class ProjectionEngine:
 
         round_columns = [
             "base_projection", "vegas_adjustment", "home_adjustment",
-            "spread_adjustment", "model_adjustment", "projection", "ceiling",
+            "spread_adjustment", "usage_opportunity", "usage_adjustment",
+            "model_adjustment", "projection", "ceiling",
             "floor", "confidence",
         ]
         output[round_columns] = output[round_columns].round(2)
@@ -154,6 +216,7 @@ class ProjectionEngine:
                     "Imported bases": int(has_imported_projection.sum()),
                     "Salary baselines": int((~has_imported_projection).sum()),
                     "Vegas covered": int(team_total.notna().sum()),
+                    "Usage covered": int(usage_games.gt(0).sum()),
                     "Average projection": round(float(output["projection"].mean()), 2),
                     "Average confidence": round(float(output["confidence"].mean()), 1),
                 }

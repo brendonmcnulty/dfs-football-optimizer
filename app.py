@@ -88,9 +88,10 @@ st.markdown(
 
     ### 5. Weekly Update
 
-    Combine the DraftKings salary file with projection providers and live
-    Vegas markets, then generate transparent in-house projection, ceiling,
-    floor, and confidence values before activating or saving the pool.
+    Combine the DraftKings salary file with projection providers, live Vegas
+    markets, and leak-free prior-week nflverse usage, then generate transparent
+    projection, ceiling, floor, and confidence values before activating or
+    saving the pool.
 
     ### 6. Settings
 
@@ -106,6 +107,11 @@ st.markdown(
     Compare saved projections with actual fantasy points, benchmark them against
     a salary-only baseline, and review calibration by position, salary, and
     confidence tier.
+
+    ### 9. Historical DFS Warehouse
+
+    Consolidate saved slates into a research dataset containing projections,
+    actual results, Vegas context, and prior-week usage metrics.
     """
 )
 

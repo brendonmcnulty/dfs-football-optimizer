@@ -102,6 +102,13 @@ class DatabaseManager:
                     floor REAL NOT NULL DEFAULT 0,
                     ownership REAL NOT NULL DEFAULT 0,
                     confidence REAL NOT NULL DEFAULT 0,
+                    usage_games INTEGER NOT NULL DEFAULT 0,
+                    passing_attempts REAL,
+                    carries REAL,
+                    targets REAL,
+                    receptions REAL,
+                    recent_fantasy_points REAL,
+                    usage_adjustment REAL NOT NULL DEFAULT 0,
                     locked INTEGER NOT NULL DEFAULT 0,
                     excluded INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
@@ -203,6 +210,11 @@ class DatabaseManager:
                     team_spread REAL,
                     targets REAL,
                     carries REAL,
+                    passing_attempts REAL,
+                    receptions REAL,
+                    recent_fantasy_points REAL,
+                    usage_games INTEGER,
+                    usage_adjustment REAL,
                     snaps REAL,
                     routes REAL,
                     red_zone_touches REAL,
@@ -297,6 +309,41 @@ class DatabaseManager:
                     "ALTER TABLE players "
                     "ADD COLUMN confidence REAL NOT NULL DEFAULT 0"
                 )
+
+            player_usage_columns = {
+                "usage_games": "INTEGER NOT NULL DEFAULT 0",
+                "passing_attempts": "REAL",
+                "carries": "REAL",
+                "targets": "REAL",
+                "receptions": "REAL",
+                "recent_fantasy_points": "REAL",
+                "usage_adjustment": "REAL NOT NULL DEFAULT 0",
+            }
+            for column_name, column_type in player_usage_columns.items():
+                if column_name not in player_columns:
+                    connection.execute(
+                        f"ALTER TABLE players ADD COLUMN {column_name} {column_type}"
+                    )
+
+            warehouse_columns = {
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA table_info(warehouse_player_weeks)"
+                ).fetchall()
+            }
+            warehouse_usage_columns = {
+                "passing_attempts": "REAL",
+                "receptions": "REAL",
+                "recent_fantasy_points": "REAL",
+                "usage_games": "INTEGER",
+                "usage_adjustment": "REAL",
+            }
+            for column_name, column_type in warehouse_usage_columns.items():
+                if column_name not in warehouse_columns:
+                    connection.execute(
+                        "ALTER TABLE warehouse_player_weeks "
+                        f"ADD COLUMN {column_name} {column_type}"
+                    )
 
             connection.execute(
                 """

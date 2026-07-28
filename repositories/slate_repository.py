@@ -149,12 +149,19 @@ class SlateRepository:
                         floor,
                         ownership,
                         confidence,
+                        usage_games,
+                        passing_attempts,
+                        carries,
+                        targets,
+                        receptions,
+                        recent_fantasy_points,
+                        usage_adjustment,
                         locked,
                         excluded,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(slate_id, external_player_id)
                     DO UPDATE SET
                         player_name = excluded.player_name,
@@ -167,6 +174,13 @@ class SlateRepository:
                         floor = excluded.floor,
                         ownership = excluded.ownership,
                         confidence = excluded.confidence,
+                        usage_games = excluded.usage_games,
+                        passing_attempts = excluded.passing_attempts,
+                        carries = excluded.carries,
+                        targets = excluded.targets,
+                        receptions = excluded.receptions,
+                        recent_fantasy_points = excluded.recent_fantasy_points,
+                        usage_adjustment = excluded.usage_adjustment,
                         locked = excluded.locked,
                         excluded = excluded.excluded,
                         updated_at = excluded.updated_at
@@ -184,6 +198,13 @@ class SlateRepository:
                         float(player["floor"]),
                         float(player["ownership"]),
                         float(player.get("confidence", 0.0)),
+                        int(player.get("usage_games", 0) or 0),
+                        None if pd.isna(player.get("passing_attempts")) else float(player.get("passing_attempts")),
+                        None if pd.isna(player.get("carries")) else float(player.get("carries")),
+                        None if pd.isna(player.get("targets")) else float(player.get("targets")),
+                        None if pd.isna(player.get("receptions")) else float(player.get("receptions")),
+                        None if pd.isna(player.get("recent_fantasy_points")) else float(player.get("recent_fantasy_points")),
+                        float(player.get("usage_adjustment", 0.0) or 0.0),
                         int(bool(player["locked"])),
                         int(bool(player["excluded"])),
                         current_time,
@@ -241,6 +262,13 @@ class SlateRepository:
                     floor,
                     ownership,
                     confidence,
+                    usage_games,
+                    passing_attempts,
+                    carries,
+                    targets,
+                    receptions,
+                    recent_fantasy_points,
+                    usage_adjustment,
                     locked,
                     excluded
                 FROM players

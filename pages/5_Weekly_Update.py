@@ -16,6 +16,10 @@ from services.odds_api_service import (
     filter_games_for_week,
     nfl_week_bounds,
 )
+from services.nflverse_usage_service import (
+    NflverseUsageService,
+    enrich_player_pool_with_usage,
+)
 
 
 st.set_page_config(page_title="Weekly Update", page_icon="🔄", layout="wide")
@@ -60,6 +64,10 @@ def _metadata(
 def _set_pipeline_result(result: PipelineResult, metadata: dict) -> None:
     st.session_state.weekly_pipeline_result = result
     st.session_state.weekly_pipeline_metadata = metadata
+    st.session_state.pop("weekly_usage_player_pool", None)
+    st.session_state.pop("weekly_usage_match_report", None)
+    st.session_state.pop("weekly_usage_unmatched", None)
+    st.session_state.pop("weekly_usage_metadata", None)
     st.session_state.pop("weekly_model_player_pool", None)
     st.session_state.pop("weekly_model_summary", None)
 
@@ -72,6 +80,7 @@ def _clear_stale_odds_state() -> None:
 database = DatabaseManager()
 pipeline = WeeklyDataPipeline()
 projection_engine = ProjectionEngine()
+usage_service = NflverseUsageService()
 
 st.title("🔄 Weekly Data Update")
 st.caption(
@@ -349,11 +358,101 @@ if "weekly_pipeline_result" in st.session_state:
         player_pool = enrich_player_pool_with_vegas(player_pool, odds_games)
 
     st.markdown("---")
-    st.subheader("4. In-house projection engine")
+    st.subheader("4. Recent NFL usage data")
+    st.write(
+        "Download prior-week player statistics from nflverse and summarize a "
+        "leak-free rolling window. The selected week's results are never used "
+        "to project that same week."
+    )
+    usage_col_1, usage_col_2 = st.columns([1, 2])
+    with usage_col_1:
+        usage_lookback = st.selectbox(
+            "Completed weeks to average",
+            options=[1, 2, 3, 4, 6, 8],
+            index=2,
+            key="weekly_usage_lookback",
+        )
+    with usage_col_2:
+        st.caption(
+            "Available fields include passing attempts, carries, targets, "
+            "receptions, yards, and recent PPR fantasy points. Snap and route "
+            "data are not included in this first nflverse integration."
+        )
+
+    fetch_usage_clicked = st.button(
+        "Fetch and merge prior-week usage",
+        use_container_width=True,
+    )
+    if fetch_usage_clicked:
+        try:
+            usage_result = usage_service.summarize_for_week(
+                season=int(season),
+                week=int(week),
+                lookback_weeks=int(usage_lookback),
+            )
+            enrichment = enrich_player_pool_with_usage(
+                player_pool,
+                usage_result.player_usage,
+            )
+            st.session_state.weekly_usage_player_pool = enrichment.player_pool
+            st.session_state.weekly_usage_match_report = enrichment.match_report
+            st.session_state.weekly_usage_unmatched = enrichment.unmatched_players
+            st.session_state.weekly_usage_metadata = {
+                "season": int(season),
+                "week": int(week),
+                "weeks_used": usage_result.weeks_used,
+                "source_rows": usage_result.source_rows,
+                "source_url": usage_result.source_url,
+            }
+            st.session_state.pop("weekly_model_player_pool", None)
+            st.session_state.pop("weekly_model_summary", None)
+            if usage_result.weeks_used:
+                st.success(
+                    "Usage merged from completed weeks "
+                    + ", ".join(str(value) for value in usage_result.weeks_used)
+                    + "."
+                )
+            else:
+                st.warning(
+                    "No completed prior weeks were available for this season/week. "
+                    "The player pool was left without usage adjustments."
+                )
+        except Exception as exc:
+            st.error(f"NFL usage update failed: {exc}")
+
+    usage_metadata = st.session_state.get("weekly_usage_metadata")
+    if (
+        "weekly_usage_player_pool" in st.session_state
+        and usage_metadata
+        and usage_metadata.get("season") == int(season)
+        and usage_metadata.get("week") == int(week)
+    ):
+        player_pool = st.session_state.weekly_usage_player_pool.copy()
+        if "weekly_usage_match_report" in st.session_state:
+            st.dataframe(
+                st.session_state.weekly_usage_match_report,
+                width="stretch",
+                hide_index=True,
+            )
+        weeks_used = usage_metadata.get("weeks_used", [])
+        if weeks_used:
+            st.caption(
+                f"Using {usage_metadata.get('source_rows', 0)} nflverse rows "
+                f"from weeks {', '.join(str(value) for value in weeks_used)}."
+            )
+        unmatched_usage = st.session_state.get("weekly_usage_unmatched")
+        if isinstance(unmatched_usage, pd.DataFrame) and not unmatched_usage.empty:
+            with st.expander(
+                f"Review {len(unmatched_usage)} players without a usage match"
+            ):
+                st.dataframe(unmatched_usage, width="stretch", hide_index=True)
+
+    st.markdown("---")
+    st.subheader("5. In-house projection engine")
     st.write(
         "Generate transparent rule-based projections from imported projections "
         "when available, or a salary baseline when they are not. Vegas, home/away, "
-        "and spread adjustments are shown separately."
+        "spread, and recent-usage adjustments are shown separately."
     )
     generate_model_clicked = st.button(
         "Generate in-house projections",
@@ -412,6 +511,14 @@ if "weekly_pipeline_result" in st.session_state:
         "vegas_adjustment",
         "home_adjustment",
         "spread_adjustment",
+        "usage_games",
+        "passing_attempts",
+        "carries",
+        "targets",
+        "receptions",
+        "recent_fantasy_points",
+        "usage_opportunity",
+        "usage_adjustment",
         "model_adjustment",
         "game_total",
         "team_implied_total",
@@ -465,6 +572,8 @@ if "weekly_pipeline_result" in st.session_state:
         source_names = list(metadata["source_names"])
         if not odds_games.empty:
             source_names.append("The Odds API")
+        if "usage_games" in player_pool.columns:
+            source_names.append("nflverse prior-week usage")
         source_names.append("In-house projection engine")
         database.record_data_update(
             season=metadata["season"],

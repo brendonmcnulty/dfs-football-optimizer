@@ -24,7 +24,8 @@ st.title("🏛️ Historical DFS Warehouse")
 st.caption(
     "Create one durable player-week dataset across every saved slate. The "
     "warehouse preserves projections, actual results, Vegas context, and "
-    "reserved fields for usage, weather, and injury data added later."
+    "prior-week nflverse usage. Weather and injury fields are reserved for "
+    "future connectors."
 )
 
 summary = warehouse.summary()
@@ -191,7 +192,8 @@ st.download_button(
 )
 
 st.info(
-    "Usage, weather, and injury columns are intentionally present even when "
-    "empty. Future data connectors will populate these same warehouse rows, "
-    "so the backtester and projection model can measure whether each new feature helps."
+    "Targets, carries, passing attempts, receptions, recent fantasy points, "
+    "usage sample size, and usage adjustments are populated when a saved slate "
+    "was built with nflverse usage. Snap, route, weather, and injury fields remain "
+    "reserved for future connectors."
 )

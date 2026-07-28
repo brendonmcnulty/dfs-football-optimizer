@@ -40,6 +40,13 @@ class WarehouseRepository:
                     p.floor,
                     p.ownership,
                     p.confidence,
+                    p.targets,
+                    p.carries,
+                    p.passing_attempts,
+                    p.receptions,
+                    p.recent_fantasy_points,
+                    p.usage_games,
+                    p.usage_adjustment,
                     h.actual_points,
                     CASE WHEN g.home_team = p.team THEN 1
                          WHEN g.away_team = p.team THEN 0
@@ -80,7 +87,9 @@ class WarehouseRepository:
                     s.id AS slate_id, s.season, s.week, s.site, s.slate_name,
                     p.external_player_id, p.player_name, p.position, p.team,
                     p.opponent, p.salary, p.projection, p.ceiling, p.floor,
-                    p.ownership, p.confidence, h.actual_points,
+                    p.ownership, p.confidence, p.targets, p.carries,
+                    p.passing_attempts, p.receptions, p.recent_fantasy_points,
+                    p.usage_games, p.usage_adjustment, h.actual_points,
                     NULL AS is_home, NULL AS game_total,
                     NULL AS team_implied_total, NULL AS opponent_implied_total,
                     NULL AS team_spread
@@ -97,11 +106,13 @@ class WarehouseRepository:
                         slate_id, season, week, site, slate_name,
                         external_player_id, player_name, position, team, opponent,
                         salary, projection, ceiling, floor, ownership, confidence,
+                        targets, carries, passing_attempts, receptions,
+                        recent_fantasy_points, usage_games, usage_adjustment,
                         actual_points, is_home, game_total, team_implied_total,
                         opponent_implied_total, team_spread, synced_at
                     ) VALUES (
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                     )
                     ON CONFLICT(slate_id, external_player_id)
                     DO UPDATE SET
@@ -119,6 +130,13 @@ class WarehouseRepository:
                         floor = excluded.floor,
                         ownership = excluded.ownership,
                         confidence = excluded.confidence,
+                        targets = excluded.targets,
+                        carries = excluded.carries,
+                        passing_attempts = excluded.passing_attempts,
+                        receptions = excluded.receptions,
+                        recent_fantasy_points = excluded.recent_fantasy_points,
+                        usage_games = excluded.usage_games,
+                        usage_adjustment = excluded.usage_adjustment,
                         actual_points = excluded.actual_points,
                         is_home = excluded.is_home,
                         game_total = excluded.game_total,
@@ -134,10 +152,13 @@ class WarehouseRepository:
                         record["position"], record["team"], record["opponent"],
                         record["salary"], record["projection"], record["ceiling"],
                         record["floor"], record["ownership"], record["confidence"],
-                        record["actual_points"], record["is_home"],
-                        record["game_total"], record["team_implied_total"],
-                        record["opponent_implied_total"], record["team_spread"],
-                        synced_at,
+                        record["targets"], record["carries"],
+                        record["passing_attempts"], record["receptions"],
+                        record["recent_fantasy_points"], record["usage_games"],
+                        record["usage_adjustment"], record["actual_points"],
+                        record["is_home"], record["game_total"],
+                        record["team_implied_total"], record["opponent_implied_total"],
+                        record["team_spread"], synced_at,
                     ),
                 )
                 saved += 1
@@ -216,7 +237,9 @@ class WarehouseRepository:
                     projection, ceiling, floor, ownership, confidence,
                     actual_points, is_home, game_total, team_implied_total,
                     opponent_implied_total, team_spread,
-                    targets, carries, snaps, routes, red_zone_touches,
+                    targets, carries, passing_attempts, receptions,
+                    recent_fantasy_points, usage_games, usage_adjustment,
+                    snaps, routes, red_zone_touches,
                     weather_temperature, weather_wind_speed,
                     weather_precipitation_probability, injury_status,
                     synced_at

@@ -168,3 +168,16 @@ red-zone touches, weather, and injury status. Future connectors will populate
 those fields without requiring the backtester or research tools to be redesigned.
 The warehouse page supports season, week, position, team, salary, and actual-result
 filters plus CSV export for external analysis.
+
+## v2.1 NFL usage integration
+
+The Weekly Update page can download official nflverse weekly player statistics
+and merge a rolling average from completed weeks before the selected slate.
+This leak-free window includes passing attempts, carries, targets, receptions,
+rushing/receiving/passing yards, and recent PPR fantasy points.
+
+The projection engine converts position-specific opportunity into a capped
+usage adjustment and raises confidence when one or more prior games are
+available. Usage fields are saved with slates and synchronized into the
+Historical DFS Warehouse for later backtesting. Snap counts, routes, red-zone
+touches, injuries, and weather are not included in this release.
