@@ -1,5 +1,7 @@
 """Application service modules."""
 
+from services.optimizer_service import OptimizerService
+
 from services.nflverse_usage_service import (
     NflverseUsageService,
     UsageDataResult,
@@ -8,6 +10,7 @@ from services.nflverse_usage_service import (
 )
 
 __all__ = [
+    "OptimizerService",
     "NflverseUsageService",
     "UsageDataResult",
     "UsageEnrichmentResult",
