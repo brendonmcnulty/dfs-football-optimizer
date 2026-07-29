@@ -13,6 +13,14 @@ from services.nflverse_usage_service import (
     enrich_player_pool_with_usage,
 )
 from services.optimizer_service import OptimizerService
+from services.slate_dashboard_service import (
+    SlateDashboardResult,
+    SlateDashboardService,
+)
+from services.simulation_service import (
+    SimulationResult,
+    SimulationService,
+)
 
 __all__ = [
     "OptimizerService",
@@ -24,4 +32,8 @@ __all__ = [
     "DefensiveMatchupResult",
     "MatchupEnrichmentResult",
     "enrich_player_pool_with_matchups",
+    "SimulationService",
+    "SimulationResult",
+    "SlateDashboardService",
+    "SlateDashboardResult",
 ]

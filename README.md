@@ -195,3 +195,34 @@ New player-pool fields include:
 - `matchup_adjustment`
 
 The projection engine applies a capped position-specific matchup adjustment and displays it separately from Vegas and recent-usage adjustments. The **Defensive Matchups** page provides position-by-position rankings and CSV export.
+
+## Simulation Lab (v2.3)
+
+The Simulation Lab runs correlated Monte Carlo simulations for saved lineups.
+It uses each player's projection, floor, and ceiling to estimate volatility,
+reuses the same simulated player result across every lineup containing that
+player, and adds modest shared team and game factors.
+
+Results include simulated mean, median, 10th/75th/90th/95th percentiles,
+portfolio first-place rate, portfolio top-20% rate, a configurable target-score
+hit rate, and average portfolio rank. CSV exports are available for lineup
+summaries, every simulated lineup score, and player outcome distributions.
+
+The portfolio first-place metric compares only the selected saved lineups. It
+is not a literal contest win probability because the opposing contest field is
+not currently simulated.
+
+
+## v3.0 Sunday Dashboard
+
+The Sunday Dashboard provides a single decision page for the active or saved slate:
+
+- slate-level health and data coverage alerts
+- top values, ceilings, leverage targets, and potential ownership fades
+- game-environment rankings
+- automatically scored QB stacks with optional bring-backs
+- saved-lineup exposure and duplicate detection
+- latest Simulation Lab takeaways when available in the session
+
+The stack score is a transparent research heuristic based on ceiling, projection,
+team implied total, and combined projected ownership. It is not a guarantee of contest results.

@@ -112,6 +112,20 @@ st.markdown(
 
     Consolidate saved slates into a research dataset containing projections,
     actual results, Vegas context, and prior-week usage metrics.
+
+    ### 10. Defensive Matchups
+
+    Review leak-free fantasy points allowed and position-specific matchup ratings.
+
+    ### 11. Simulation Lab
+
+    Run correlated Monte Carlo simulations for saved lineup portfolios and compare
+    floor, median, upside, target-score probability, and portfolio rank.
+
+    ### 12. Sunday Dashboard
+
+    Review the slate in one place: action alerts, values, ceilings, leverage, game
+    environments, stack rankings, portfolio exposure, duplicates, and simulation takeaways.
     """
 )
 
