@@ -1,5 +1,9 @@
 """Application service modules."""
 
+from services.dfs_coach_service import (
+    DFSCoachResult,
+    DFSCoachService,
+)
 from services.defensive_matchup_service import (
     DefensiveMatchupResult,
     DefensiveMatchupService,
@@ -24,6 +28,8 @@ from services.simulation_service import (
 
 __all__ = [
     "OptimizerService",
+    "DFSCoachService",
+    "DFSCoachResult",
     "NflverseUsageService",
     "UsageDataResult",
     "UsageEnrichmentResult",

@@ -126,6 +126,11 @@ st.markdown(
 
     Review the slate in one place: action alerts, values, ceilings, leverage, game
     environments, stack rankings, portfolio exposure, duplicates, and simulation takeaways.
+
+    ### 13. DFS Coach
+
+    Review explainable player and lineup recommendations showing the strongest
+    projection, ceiling, value, ownership, matchup, correlation, and simulation reasons.
     """
 )
 

@@ -226,3 +226,18 @@ The Sunday Dashboard provides a single decision page for the active or saved sla
 
 The stack score is a transparent research heuristic based on ceiling, projection,
 team implied total, and combined projected ownership. It is not a guarantee of contest results.
+
+## DFS Coach (v3.1)
+
+The DFS Coach converts the platform's projections and portfolio analytics into
+transparent research recommendations. It includes:
+
+- Player coach scores and recommendation tiers
+- Plain-language reasons based on projection, ceiling, value, ownership, Vegas, usage, and matchups
+- Position and ownership filters
+- Lineup coaching with salary, projection, ceiling, ownership, QB stacks, and bring-backs
+- Optional Simulation Lab context for median, upside, target-hit rate, and portfolio-first rate
+- CSV export of the complete player recommendation table
+
+Coach recommendations are model-based research signals and should be reviewed
+alongside late injury news and contest-specific strategy.
