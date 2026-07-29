@@ -16,6 +16,10 @@ from services.odds_api_service import (
     filter_games_for_week,
     nfl_week_bounds,
 )
+from services.defensive_matchup_service import (
+    DefensiveMatchupService,
+    enrich_player_pool_with_matchups,
+)
 from services.nflverse_usage_service import (
     NflverseUsageService,
     enrich_player_pool_with_usage,
@@ -68,6 +72,10 @@ def _set_pipeline_result(result: PipelineResult, metadata: dict) -> None:
     st.session_state.pop("weekly_usage_match_report", None)
     st.session_state.pop("weekly_usage_unmatched", None)
     st.session_state.pop("weekly_usage_metadata", None)
+    st.session_state.pop("weekly_matchup_player_pool", None)
+    st.session_state.pop("weekly_matchup_report", None)
+    st.session_state.pop("weekly_matchup_unmatched", None)
+    st.session_state.pop("weekly_matchup_metadata", None)
     st.session_state.pop("weekly_model_player_pool", None)
     st.session_state.pop("weekly_model_summary", None)
 
@@ -81,6 +89,7 @@ database = DatabaseManager()
 pipeline = WeeklyDataPipeline()
 projection_engine = ProjectionEngine()
 usage_service = NflverseUsageService()
+matchup_service = DefensiveMatchupService()
 
 st.title("🔄 Weekly Data Update")
 st.caption(
@@ -448,11 +457,89 @@ if "weekly_pipeline_result" in st.session_state:
                 st.dataframe(unmatched_usage, width="stretch", hide_index=True)
 
     st.markdown("---")
-    st.subheader("5. In-house projection engine")
+    st.subheader("5. Defensive matchup ratings")
+    st.write(
+        "Calculate rolling DraftKings PPR points allowed by each defense to "
+        "QB, RB, WR, and TE. Only completed weeks before the selected week are used."
+    )
+    matchup_col_1, matchup_col_2 = st.columns([1, 2])
+    with matchup_col_1:
+        matchup_lookback = st.selectbox(
+            "Matchup weeks to average",
+            options=[3, 4, 6, 8, 12],
+            index=2,
+            key="weekly_matchup_lookback",
+        )
+    with matchup_col_2:
+        st.caption(
+            "A rating near 100 is a favorable matchup because that defense has "
+            "allowed more fantasy points to the position. A rating near 0 is tough."
+        )
+
+    fetch_matchups_clicked = st.button(
+        "Fetch and merge defensive matchups",
+        use_container_width=True,
+    )
+    if fetch_matchups_clicked:
+        try:
+            matchup_result = matchup_service.summarize_for_week(
+                season=int(season),
+                week=int(week),
+                lookback_weeks=int(matchup_lookback),
+            )
+            enrichment = enrich_player_pool_with_matchups(
+                player_pool,
+                matchup_result.ratings,
+            )
+            st.session_state.weekly_matchup_player_pool = enrichment.player_pool
+            st.session_state.weekly_matchup_report = enrichment.match_report
+            st.session_state.weekly_matchup_unmatched = enrichment.unmatched_players
+            st.session_state.weekly_matchup_metadata = {
+                "season": int(season),
+                "week": int(week),
+                "weeks_used": matchup_result.weeks_used,
+                "source_rows": matchup_result.source_rows,
+            }
+            st.session_state.weekly_defensive_ratings = matchup_result.ratings
+            st.session_state.pop("weekly_model_player_pool", None)
+            st.session_state.pop("weekly_model_summary", None)
+            if matchup_result.weeks_used:
+                st.success(
+                    "Defensive matchups merged from completed weeks "
+                    + ", ".join(str(value) for value in matchup_result.weeks_used)
+                    + "."
+                )
+            else:
+                st.warning("No completed prior weeks were available for matchup ratings.")
+        except Exception as exc:
+            st.error(f"Defensive matchup update failed: {exc}")
+
+    matchup_metadata = st.session_state.get("weekly_matchup_metadata")
+    if (
+        "weekly_matchup_player_pool" in st.session_state
+        and matchup_metadata
+        and matchup_metadata.get("season") == int(season)
+        and matchup_metadata.get("week") == int(week)
+    ):
+        player_pool = st.session_state.weekly_matchup_player_pool.copy()
+        st.dataframe(
+            st.session_state.weekly_matchup_report,
+            width="stretch",
+            hide_index=True,
+        )
+        unmatched_matchups = st.session_state.get("weekly_matchup_unmatched")
+        if isinstance(unmatched_matchups, pd.DataFrame) and not unmatched_matchups.empty:
+            with st.expander(
+                f"Review {len(unmatched_matchups)} players without a matchup rating"
+            ):
+                st.dataframe(unmatched_matchups, width="stretch", hide_index=True)
+
+    st.markdown("---")
+    st.subheader("6. In-house projection engine")
     st.write(
         "Generate transparent rule-based projections from imported projections "
         "when available, or a salary baseline when they are not. Vegas, home/away, "
-        "spread, and recent-usage adjustments are shown separately."
+        "spread, recent-usage, and defensive-matchup adjustments are shown separately."
     )
     generate_model_clicked = st.button(
         "Generate in-house projections",
@@ -519,6 +606,11 @@ if "weekly_pipeline_result" in st.session_state:
         "recent_fantasy_points",
         "usage_opportunity",
         "usage_adjustment",
+        "matchup_rating",
+        "matchup_label",
+        "fantasy_points_allowed",
+        "matchup_games",
+        "matchup_adjustment",
         "model_adjustment",
         "game_total",
         "team_implied_total",
@@ -574,6 +666,8 @@ if "weekly_pipeline_result" in st.session_state:
             source_names.append("The Odds API")
         if "usage_games" in player_pool.columns:
             source_names.append("nflverse prior-week usage")
+        if "matchup_rating" in player_pool.columns:
+            source_names.append("nflverse defensive matchup ratings")
         source_names.append("In-house projection engine")
         database.record_data_update(
             season=metadata["season"],

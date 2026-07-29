@@ -181,3 +181,17 @@ usage adjustment and raises confidence when one or more prior games are
 available. Usage fields are saved with slates and synchronized into the
 Historical DFS Warehouse for later backtesting. Snap counts, routes, red-zone
 touches, injuries, and weather are not included in this release.
+
+## v2.2 Defensive Matchup Engine
+
+The weekly workflow can now download nflverse player statistics and build leak-free rolling defensive matchup ratings for QB, RB, WR, and TE. Ratings use only completed weeks before the selected week.
+
+New player-pool fields include:
+
+- `matchup_rating` (0-100; higher is more favorable)
+- `matchup_label`
+- `fantasy_points_allowed`
+- `matchup_games`
+- `matchup_adjustment`
+
+The projection engine applies a capped position-specific matchup adjustment and displays it separately from Vegas and recent-usage adjustments. The **Defensive Matchups** page provides position-by-position rankings and CSV export.

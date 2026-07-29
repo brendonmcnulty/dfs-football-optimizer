@@ -156,12 +156,17 @@ class SlateRepository:
                         receptions,
                         recent_fantasy_points,
                         usage_adjustment,
+                        matchup_rating,
+                        matchup_label,
+                        fantasy_points_allowed,
+                        matchup_games,
+                        matchup_adjustment,
                         locked,
                         excluded,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(slate_id, external_player_id)
                     DO UPDATE SET
                         player_name = excluded.player_name,
@@ -181,6 +186,11 @@ class SlateRepository:
                         receptions = excluded.receptions,
                         recent_fantasy_points = excluded.recent_fantasy_points,
                         usage_adjustment = excluded.usage_adjustment,
+                        matchup_rating = excluded.matchup_rating,
+                        matchup_label = excluded.matchup_label,
+                        fantasy_points_allowed = excluded.fantasy_points_allowed,
+                        matchup_games = excluded.matchup_games,
+                        matchup_adjustment = excluded.matchup_adjustment,
                         locked = excluded.locked,
                         excluded = excluded.excluded,
                         updated_at = excluded.updated_at
@@ -205,6 +215,11 @@ class SlateRepository:
                         None if pd.isna(player.get("receptions")) else float(player.get("receptions")),
                         None if pd.isna(player.get("recent_fantasy_points")) else float(player.get("recent_fantasy_points")),
                         float(player.get("usage_adjustment", 0.0) or 0.0),
+                        None if pd.isna(player.get("matchup_rating")) else float(player.get("matchup_rating")),
+                        None if pd.isna(player.get("matchup_label")) else str(player.get("matchup_label")),
+                        None if pd.isna(player.get("fantasy_points_allowed")) else float(player.get("fantasy_points_allowed")),
+                        None if pd.isna(player.get("matchup_games")) else int(player.get("matchup_games")),
+                        float(player.get("matchup_adjustment", 0.0) or 0.0),
                         int(bool(player["locked"])),
                         int(bool(player["excluded"])),
                         current_time,
@@ -269,6 +284,11 @@ class SlateRepository:
                     receptions,
                     recent_fantasy_points,
                     usage_adjustment,
+                    matchup_rating,
+                    matchup_label,
+                    fantasy_points_allowed,
+                    matchup_games,
+                    matchup_adjustment,
                     locked,
                     excluded
                 FROM players

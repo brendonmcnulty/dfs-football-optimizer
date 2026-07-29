@@ -109,6 +109,11 @@ class DatabaseManager:
                     receptions REAL,
                     recent_fantasy_points REAL,
                     usage_adjustment REAL NOT NULL DEFAULT 0,
+                    matchup_rating REAL,
+                    matchup_label TEXT,
+                    fantasy_points_allowed REAL,
+                    matchup_games INTEGER,
+                    matchup_adjustment REAL NOT NULL DEFAULT 0,
                     locked INTEGER NOT NULL DEFAULT 0,
                     excluded INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
@@ -215,6 +220,11 @@ class DatabaseManager:
                     recent_fantasy_points REAL,
                     usage_games INTEGER,
                     usage_adjustment REAL,
+                    matchup_rating REAL,
+                    matchup_label TEXT,
+                    fantasy_points_allowed REAL,
+                    matchup_games INTEGER,
+                    matchup_adjustment REAL,
                     snaps REAL,
                     routes REAL,
                     red_zone_touches REAL,
@@ -318,6 +328,11 @@ class DatabaseManager:
                 "receptions": "REAL",
                 "recent_fantasy_points": "REAL",
                 "usage_adjustment": "REAL NOT NULL DEFAULT 0",
+                "matchup_rating": "REAL",
+                "matchup_label": "TEXT",
+                "fantasy_points_allowed": "REAL",
+                "matchup_games": "INTEGER",
+                "matchup_adjustment": "REAL NOT NULL DEFAULT 0",
             }
             for column_name, column_type in player_usage_columns.items():
                 if column_name not in player_columns:
@@ -337,6 +352,11 @@ class DatabaseManager:
                 "recent_fantasy_points": "REAL",
                 "usage_games": "INTEGER",
                 "usage_adjustment": "REAL",
+                "matchup_rating": "REAL",
+                "matchup_label": "TEXT",
+                "fantasy_points_allowed": "REAL",
+                "matchup_games": "INTEGER",
+                "matchup_adjustment": "REAL",
             }
             for column_name, column_type in warehouse_usage_columns.items():
                 if column_name not in warehouse_columns:

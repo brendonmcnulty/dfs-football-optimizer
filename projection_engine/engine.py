@@ -39,6 +39,14 @@ USAGE_ADJUSTMENT_SENSITIVITY = {
     "DST": 0.0,
 }
 
+MATCHUP_ADJUSTMENT_SENSITIVITY = {
+    "QB": 0.040,
+    "RB": 0.045,
+    "WR": 0.040,
+    "TE": 0.035,
+    "DST": 0.0,
+}
+
 VEGAS_SENSITIVITY = {
     "QB": 0.16,
     "RB": 0.18,
@@ -60,7 +68,7 @@ class ProjectionEngine:
     Version 1.5 intentionally uses only information already present in the
     weekly player pool: salary, optional imported projections, position,
     opponent, home/away status, spread, implied team total, and leak-free
-    recent usage from completed prior weeks. The engine is
+    recent usage and opponent matchup ratings from completed prior weeks. The engine is
     deterministic and exposes every adjustment it applies.
     """
 
@@ -169,11 +177,33 @@ class ProjectionEngine:
         ).clip(lower=-3.0, upper=3.0)
         output["usage_adjustment"] = usage_adjustment.where(usage_games > 0, 0.0)
 
+        matchup_rating = pd.to_numeric(
+            output.get("matchup_rating", pd.Series(index=output.index, dtype=float)),
+            errors="coerce",
+        )
+        output["matchup_rating"] = matchup_rating
+        if "fantasy_points_allowed" not in output.columns:
+            output["fantasy_points_allowed"] = pd.Series(
+                index=output.index, dtype=float
+            )
+        matchup_games = pd.to_numeric(
+            output.get("matchup_games", pd.Series(0, index=output.index)),
+            errors="coerce",
+        ).fillna(0.0)
+        matchup_adjustment = (
+            (matchup_rating - 50.0)
+            * position.map(MATCHUP_ADJUSTMENT_SENSITIVITY).fillna(0.0)
+        ).clip(lower=-2.25, upper=2.25)
+        output["matchup_adjustment"] = matchup_adjustment.where(
+            matchup_games > 0, 0.0
+        ).fillna(0.0)
+
         output["model_adjustment"] = (
             output["vegas_adjustment"]
             + output["home_adjustment"]
             + output["spread_adjustment"]
             + output["usage_adjustment"]
+            + output["matchup_adjustment"]
         )
         output["projection"] = (
             output["base_projection"] + output["model_adjustment"]
@@ -185,6 +215,7 @@ class ProjectionEngine:
         confidence += spread.notna().astype(float) * 5.0
         confidence += usage_games.gt(0).astype(float) * 10.0
         confidence += usage_games.ge(3).astype(float) * 5.0
+        confidence += matchup_games.gt(0).astype(float) * 5.0
         if "opponent" in output.columns:
             confidence += (
                 output["opponent"].fillna("").astype(str).str.strip().ne("")
@@ -203,6 +234,7 @@ class ProjectionEngine:
         round_columns = [
             "base_projection", "vegas_adjustment", "home_adjustment",
             "spread_adjustment", "usage_opportunity", "usage_adjustment",
+            "matchup_rating", "fantasy_points_allowed", "matchup_adjustment",
             "model_adjustment", "projection", "ceiling",
             "floor", "confidence",
         ]
@@ -217,6 +249,7 @@ class ProjectionEngine:
                     "Salary baselines": int((~has_imported_projection).sum()),
                     "Vegas covered": int(team_total.notna().sum()),
                     "Usage covered": int(usage_games.gt(0).sum()),
+                    "Matchups covered": int(matchup_games.gt(0).sum()),
                     "Average projection": round(float(output["projection"].mean()), 2),
                     "Average confidence": round(float(output["confidence"].mean()), 1),
                 }
