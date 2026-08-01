@@ -3,6 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from database import DatabaseManager
+from services import PlayerPoolService
 
 
 st.set_page_config(
@@ -12,6 +13,7 @@ st.set_page_config(
 )
 
 database = DatabaseManager()
+player_pool_service = PlayerPoolService()
 
 saved_slates = database.list_slates()
 saved_lineups = database.list_lineups()
@@ -40,20 +42,16 @@ metric_column_2.metric(
     len(saved_lineups),
 )
 
-if "player_pool" in st.session_state:
-    loaded_player_count = len(st.session_state.player_pool)
-else:
-    loaded_player_count = 0
+active_pool = player_pool_service.get_active_pool(st.session_state)
+active_pool_metadata = player_pool_service.get_metadata(st.session_state)
+loaded_player_count = len(active_pool)
 
 metric_column_3.metric(
     "Players currently loaded",
     loaded_player_count,
 )
 
-active_slate_name = st.session_state.get(
-    "active_slate_name",
-    "None",
-)
+active_slate_name = active_pool_metadata.active_slate_name
 
 metric_column_4.metric(
     "Active slate",
@@ -131,10 +129,15 @@ st.markdown(
 
     Review explainable player and lineup recommendations showing the strongest
     projection, ceiling, value, ownership, matchup, correlation, and simulation reasons.
+
+    ### 14. Developer Diagnostics
+
+    Check application health, inspect player-data coverage, load an enriched
+    offseason test slate, and run a Slate Analysis smoke test.
     """
 )
 
-if "player_pool" not in st.session_state:
+if not player_pool_service.has_active_pool(st.session_state):
     st.info(
         "Begin on the **Player Pool** page, or open **Saved Slates** to load "
         "a player pool already stored in the database."

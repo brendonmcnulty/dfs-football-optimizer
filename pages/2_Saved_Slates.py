@@ -3,6 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from database import DatabaseManager
+from services import PlayerPoolService
 
 
 st.set_page_config(
@@ -12,6 +13,7 @@ st.set_page_config(
 )
 
 database = DatabaseManager()
+player_pool_service = PlayerPoolService()
 
 st.title("💾 Saved Slates")
 st.caption("View and load player pools stored in SQLite")
@@ -154,15 +156,17 @@ load_clicked = st.button(
 )
 
 if load_clicked:
-    st.session_state.player_pool = preview_players.copy()
-    st.session_state.active_slate_id = selected_slate_id
-
-    st.session_state.season = int(selected_row["season"])
-    st.session_state.week = int(selected_row["week"])
-    st.session_state.site = str(selected_row["site"])
-    st.session_state.slate_name = str(selected_row["slate_name"])
-
-    st.session_state.active_slate_name = selected_display_name
+    player_pool_service.set_active_pool(
+        st.session_state,
+        preview_players,
+        source="Saved Slates database",
+        active_slate_name=selected_display_name,
+        active_slate_id=selected_slate_id,
+        season=int(selected_row["season"]),
+        week=int(selected_row["week"]),
+        site=str(selected_row["site"]),
+        slate_name=str(selected_row["slate_name"]),
+    )
 
     st.success(
         f"Loaded {len(preview_players)} players from "

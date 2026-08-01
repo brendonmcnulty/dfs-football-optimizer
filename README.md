@@ -241,3 +241,27 @@ transparent research recommendations. It includes:
 
 Coach recommendations are model-based research signals and should be reviewed
 alongside late injury news and contest-specific strategy.
+
+
+## Developer diagnostics and offseason fixture
+
+The **Developer Diagnostics** page checks imports, SQLite connectivity, sample files,
+and active-player data coverage. It also loads `data/sample/enriched_sample_players.csv`,
+a fully populated illustrative slate for testing the optimizer, Sunday Dashboard, DFS
+Coach, and Slate Analysis service during the offseason. The values in that file are test
+data only and must not be treated as real projections.
+
+## Active Player Pool Manager
+
+The application uses `services/player_pool_service.py` as the shared interface for the active player pool. CSV uploads, saved slates, historical slates, Weekly Update, the Optimizer, Sunday Dashboard, DFS Coach, and Developer Diagnostics now read or write the pool through the same service.
+
+The service keeps the existing Streamlit session keys synchronized for compatibility while also tracking:
+
+- player-pool source
+- active slate name and database ID
+- season, week, site, and slate name
+- player count
+- load timestamp
+- revision number
+
+Developer Diagnostics displays this metadata and a common data-coverage report.

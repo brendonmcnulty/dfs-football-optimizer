@@ -7,6 +7,7 @@ import streamlit as st
 
 from data_loader import add_derived_metrics, merge_projections, normalize_player_pool
 from database import DatabaseManager
+from services import PlayerPoolService
 
 
 st.set_page_config(
@@ -16,6 +17,7 @@ st.set_page_config(
 )
 
 database = DatabaseManager()
+player_pool_service = PlayerPoolService()
 
 st.title("👥 Player Pool")
 st.caption("Import, edit, and save a DraftKings NFL player pool")
@@ -95,27 +97,31 @@ if salary_file is not None:
         )
 
         if uploaded_file_signature != previous_signature:
-            st.session_state.player_pool = imported_players
-            st.session_state.uploaded_file_signature = (
-                uploaded_file_signature
+            active_name = f"{season} Week {week} — {site} {slate_name}"
+            player_pool_service.set_active_pool(
+                st.session_state,
+                imported_players,
+                source="Player Pool CSV upload",
+                active_slate_name=active_name,
+                active_slate_id=None,
+                season=int(season),
+                week=int(week),
+                site=site,
+                slate_name=slate_name,
             )
-
-            st.session_state.active_slate_id = None
-            st.session_state.active_slate_name = (
-                f"{season} Week {week} — {site} {slate_name}"
-            )
+            st.session_state.uploaded_file_signature = uploaded_file_signature
 
     except Exception as exc:
         st.error(f"Could not read the uploaded file: {exc}")
 
-if "player_pool" not in st.session_state:
+if not player_pool_service.has_active_pool(st.session_state):
     st.info(
         "Upload a player-pool CSV to begin, or use the **Saved Slates** "
         "page to load a previously saved slate."
     )
     st.stop()
 
-players = st.session_state.player_pool.copy()
+players = player_pool_service.get_active_pool(st.session_state)
 if "ceiling" not in players.columns:
     players["ceiling"] = players["projection"]
 if "floor" not in players.columns:
@@ -222,11 +228,11 @@ edited_players = st.data_editor(
 )
 
 edited_players = add_derived_metrics(edited_players)
-st.session_state.player_pool = edited_players.copy()
-st.session_state.season = int(season)
-st.session_state.week = int(week)
-st.session_state.site = site
-st.session_state.slate_name = slate_name
+player_pool_service.update_active_pool(
+    st.session_state,
+    edited_players,
+    source="Player Pool editor",
+)
 
 valid_projection_count = int(
     (edited_players["projection"] > 0).sum()
@@ -270,7 +276,11 @@ with button_column_2:
     )
 
 if save_session_clicked:
-    st.session_state.player_pool = edited_players.copy()
+    player_pool_service.update_active_pool(
+        st.session_state,
+        edited_players,
+        source="Player Pool editor save",
+    )
     st.success("Player-pool changes were saved for this session.")
 
 if save_database_clicked:
@@ -290,10 +300,18 @@ if save_database_clicked:
             players=edited_players,
         )
 
-        st.session_state.player_pool = edited_players.copy()
-        st.session_state.active_slate_id = slate_id
-        st.session_state.active_slate_name = (
-            f"{season} Week {week} — {site} {slate_name}"
+        player_pool_service.set_active_pool(
+            st.session_state,
+            edited_players,
+            source="Saved slate database",
+            active_slate_name=(
+                f"{season} Week {week} — {site} {slate_name}"
+            ),
+            active_slate_id=slate_id,
+            season=int(season),
+            week=int(week),
+            site=site,
+            slate_name=slate_name,
         )
 
         st.success(

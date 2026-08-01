@@ -10,6 +10,7 @@ from core.local_settings import get_odds_api_key
 from data_pipeline import DataSourceInput, PipelineResult, WeeklyDataPipeline
 from database import DatabaseManager
 from projection_engine import ProjectionEngine
+from services import PlayerPoolService
 from services.odds_api_service import (
     OddsApiService,
     enrich_player_pool_with_vegas,
@@ -30,6 +31,7 @@ st.set_page_config(page_title="Weekly Update", page_icon="🔄", layout="wide")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_PLAYER_PATH = PROJECT_ROOT / "data" / "sample" / "sample_players.csv"
+player_pool_service = PlayerPoolService()
 
 
 def _read_csv(uploaded_file) -> pd.DataFrame:
@@ -143,10 +145,8 @@ salary_file = st.file_uploader(
 
 foundation_col_1, foundation_col_2 = st.columns(2)
 with foundation_col_1:
-    active_pool_available = (
-        "player_pool" in st.session_state
-        and isinstance(st.session_state.player_pool, pd.DataFrame)
-        and not st.session_state.player_pool.empty
+    active_pool_available = player_pool_service.has_active_pool(
+        st.session_state
     )
     use_active_clicked = st.button(
         "Use current active player pool",
@@ -161,7 +161,9 @@ with foundation_col_2:
     )
 
 if use_active_clicked:
-    result = _empty_pipeline_result(st.session_state.player_pool)
+    result = _empty_pipeline_result(
+        player_pool_service.get_active_pool(st.session_state)
+    )
     metadata = _metadata(
         season,
         week,
@@ -651,15 +653,20 @@ if "weekly_pipeline_result" in st.session_state:
         )
 
     if use_clicked:
-        st.session_state.player_pool = player_pool.copy()
-        st.session_state.season = metadata["season"]
-        st.session_state.week = metadata["week"]
-        st.session_state.site = metadata["site"]
-        st.session_state.slate_name = metadata["slate_name"]
-        st.session_state.active_slate_id = None
-        st.session_state.active_slate_name = (
+        active_name = (
             f"{metadata['season']} Week {metadata['week']} — "
             f"{metadata['site']} {metadata['slate_name']}"
+        )
+        player_pool_service.set_active_pool(
+            st.session_state,
+            player_pool,
+            source="Weekly Update pipeline",
+            active_slate_name=active_name,
+            active_slate_id=None,
+            season=metadata["season"],
+            week=metadata["week"],
+            site=metadata["site"],
+            slate_name=metadata["slate_name"],
         )
         source_names = list(metadata["source_names"])
         if not odds_games.empty:
@@ -692,7 +699,21 @@ if "weekly_pipeline_result" in st.session_state:
                 slate_id=slate_id,
                 players=player_pool,
             )
-            st.session_state.active_slate_id = slate_id
+            if player_pool_service.has_active_pool(st.session_state):
+                player_pool_service.set_active_pool(
+                    st.session_state,
+                    player_pool_service.get_active_pool(st.session_state),
+                    source="Weekly Update saved slate",
+                    active_slate_name=(
+                        f"{metadata['season']} Week {metadata['week']} — "
+                        f"{metadata['site']} {metadata['slate_name']}"
+                    ),
+                    active_slate_id=slate_id,
+                    season=metadata["season"],
+                    week=metadata["week"],
+                    site=metadata["site"],
+                    slate_name=metadata["slate_name"],
+                )
             st.success(f"Saved {saved_count} players to the slate database.")
         except Exception as exc:
             st.error(f"Could not save the updated slate: {exc}")

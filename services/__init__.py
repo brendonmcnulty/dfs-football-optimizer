@@ -17,17 +17,30 @@ from services.nflverse_usage_service import (
     enrich_player_pool_with_usage,
 )
 from services.optimizer_service import OptimizerService
-from services.slate_dashboard_service import (
-    SlateDashboardResult,
-    SlateDashboardService,
+from services.player_pool_service import (
+    ActivePlayerPoolMetadata,
+    PlayerPoolService,
 )
 from services.simulation_service import (
     SimulationResult,
     SimulationService,
 )
+from services.slate_analysis_service import (
+    GameInsight,
+    PlayerInsight,
+    SlateAnalysis,
+    SlateAnalysisService,
+    StackInsight,
+)
+from services.slate_dashboard_service import (
+    SlateDashboardResult,
+    SlateDashboardService,
+)
 
 __all__ = [
     "OptimizerService",
+    "PlayerPoolService",
+    "ActivePlayerPoolMetadata",
     "DFSCoachService",
     "DFSCoachResult",
     "NflverseUsageService",
@@ -42,4 +55,9 @@ __all__ = [
     "SimulationResult",
     "SlateDashboardService",
     "SlateDashboardResult",
+    "SlateAnalysisService",
+    "SlateAnalysis",
+    "PlayerInsight",
+    "GameInsight",
+    "StackInsight",
 ]

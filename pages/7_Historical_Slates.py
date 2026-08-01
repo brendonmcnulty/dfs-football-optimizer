@@ -8,9 +8,12 @@ import streamlit as st
 
 from data_pipeline import DataSourceInput, WeeklyDataPipeline
 from database import DatabaseManager
+from services import PlayerPoolService
 
 
 st.set_page_config(page_title="Historical Slates", page_icon="📚", layout="wide")
+
+player_pool_service = PlayerPoolService()
 
 ACTUAL_ALIASES = [
     "actual_points", "Actual Points", "actual", "Actual", "FPTS",
@@ -188,12 +191,18 @@ if "historical_pool" in st.session_state:
             st.success(f"Saved {player_count} players and {actual_count} actual results.")
     with activate_col:
         if st.button("Use imported slate as active player pool", use_container_width=True):
-            st.session_state.player_pool = pool.copy()
-            st.session_state.season = int(season)
-            st.session_state.week = int(week)
-            st.session_state.site = site
-            st.session_state.slate_name = slate_name
-            st.session_state.active_slate_name = f"{season} Week {week} — {site} {slate_name}"
+            player_pool_service.set_active_pool(
+                st.session_state,
+                pool,
+                source="Historical slate import",
+                active_slate_name=(
+                    f"{season} Week {week} — {site} {slate_name}"
+                ),
+                season=int(season),
+                week=int(week),
+                site=site,
+                slate_name=slate_name,
+            )
             st.success("Historical player pool is now active. Open Optimizer to test it.")
 
 st.markdown("---")
@@ -219,9 +228,18 @@ else:
     load_col, evaluate_col = st.columns(2)
     with load_col:
         if st.button("Load saved historical slate into optimizer", use_container_width=True):
-            st.session_state.player_pool = saved_pool.copy()
-            st.session_state.active_slate_id = selected_id
-            st.session_state.active_slate_name = selected_label
+            selected_row = slates.loc[slates["id"] == selected_id].iloc[0]
+            player_pool_service.set_active_pool(
+                st.session_state,
+                saved_pool,
+                source="Saved historical slate",
+                active_slate_name=selected_label,
+                active_slate_id=selected_id,
+                season=int(selected_row["season"]),
+                week=int(selected_row["week"]),
+                site=str(selected_row["site"]),
+                slate_name=str(selected_row["slate_name"]),
+            )
             st.success("Historical slate loaded into the active player pool.")
     with evaluate_col:
         show_evaluation = st.button("Evaluate projections", use_container_width=True)

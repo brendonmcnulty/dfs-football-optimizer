@@ -9,7 +9,7 @@ from config import SALARY_CAP
 from core.settings import OptimizerSettings
 from database import DatabaseManager
 from data_loader import add_derived_metrics
-from services import OptimizerService
+from services import OptimizerService, PlayerPoolService
 
 
 st.set_page_config(
@@ -20,6 +20,7 @@ st.set_page_config(
 
 database = DatabaseManager()
 optimizer_service = OptimizerService()
+player_pool_service = PlayerPoolService()
 
 st.title("⚙️ Lineup Optimizer")
 st.caption(
@@ -27,14 +28,14 @@ st.caption(
     "with exposure, correlation, and ownership controls"
 )
 
-if "player_pool" not in st.session_state:
+if not player_pool_service.has_active_pool(st.session_state):
     st.warning(
         "No player pool is currently loaded. Import a CSV from the "
         "**Player Pool** page or load a slate from **Saved Slates**."
     )
     st.stop()
 
-players = st.session_state.player_pool.copy()
+players = player_pool_service.get_active_pool(st.session_state)
 if "ceiling" not in players.columns:
     players["ceiling"] = players["projection"]
 if "floor" not in players.columns:
@@ -42,16 +43,15 @@ if "floor" not in players.columns:
 if "ownership" not in players.columns:
     players["ownership"] = 0.0
 players = add_derived_metrics(players)
-st.session_state.player_pool = players.copy()
-
-active_slate_name = st.session_state.get(
-    "active_slate_name",
-    "Unsaved player pool",
+player_pool_service.update_active_pool(
+    st.session_state,
+    players,
+    source="Optimizer normalization",
 )
 
-active_slate_id = st.session_state.get(
-    "active_slate_id"
-)
+active_metadata = player_pool_service.get_metadata(st.session_state)
+active_slate_name = active_metadata.active_slate_name
+active_slate_id = active_metadata.active_slate_id
 
 st.subheader("Active slate")
 st.write(f"**{active_slate_name}**")

@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from database import DatabaseManager
-from services import DFSCoachService
+from services import PlayerPoolService, DFSCoachService
 
 
 st.set_page_config(page_title="DFS Coach", page_icon="🧠", layout="wide")
@@ -18,9 +18,14 @@ st.info(
 
 database = DatabaseManager()
 service = DFSCoachService()
+player_pool_service = PlayerPoolService()
 slates = database.list_slates()
 
-source_options = ["Active player pool"] if "player_pool" in st.session_state else []
+source_options = (
+    ["Active player pool"]
+    if player_pool_service.has_active_pool(st.session_state)
+    else []
+)
 if not slates.empty:
     source_options.append("Saved slate")
 if not source_options:
@@ -29,11 +34,12 @@ if not source_options:
 
 source = st.radio("Data source", source_options, horizontal=True)
 selected_slate_id = None
-selected_slate_name = st.session_state.get("active_slate_name", "Active player pool")
+active_metadata = player_pool_service.get_metadata(st.session_state)
+selected_slate_name = active_metadata.active_slate_name
 
 if source == "Active player pool":
-    player_pool = st.session_state.player_pool.copy()
-    selected_slate_id = st.session_state.get("active_slate_id")
+    player_pool = player_pool_service.get_active_pool(st.session_state)
+    selected_slate_id = active_metadata.active_slate_id
 else:
     slate_options = {
         f"#{int(row['id'])} — {int(row['season'])} Week {int(row['week'])} — {row['slate_name']}": int(row["id"])
