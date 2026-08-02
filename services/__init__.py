@@ -32,6 +32,11 @@ from services.slate_analysis_service import (
     SlateAnalysisService,
     StackInsight,
 )
+from services.slate_narrative_service import (
+    NarrativeSection,
+    SlateNarrative,
+    SlateNarrativeService,
+)
 from services.slate_dashboard_service import (
     SlateDashboardResult,
     SlateDashboardService,
@@ -56,6 +61,9 @@ __all__ = [
     "SlateDashboardService",
     "SlateDashboardResult",
     "SlateAnalysisService",
+    "NarrativeSection",
+    "SlateNarrative",
+    "SlateNarrativeService",
     "SlateAnalysis",
     "PlayerInsight",
     "GameInsight",
