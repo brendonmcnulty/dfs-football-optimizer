@@ -63,7 +63,7 @@ class OptimizerSettings:
     """Configuration values used when generating DFS lineups."""
 
     salary_cap: int = SALARY_CAP
-    minimum_salary: int = 0
+    minimum_salary: int = max(SALARY_CAP - 1000, 0)
     solver_timeout_seconds: float = 15.0
     lineup_count: int = 1
     minimum_unique_players: int = 1

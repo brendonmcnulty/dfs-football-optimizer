@@ -1,5 +1,15 @@
 """Application service modules."""
 
+from services.draftkings_contest_service import (
+    ActiveDraftKingsContest,
+    DraftKingsContestService,
+)
+from services.draftkings_export_service import (
+    DraftKingsEntryTemplate,
+    DraftKingsExportError,
+    DraftKingsExportResult,
+    DraftKingsExportService,
+)
 from services.dfs_coach_service import (
     DFSCoachResult,
     DFSCoachService,
@@ -43,6 +53,12 @@ from services.slate_dashboard_service import (
 )
 
 __all__ = [
+    "DraftKingsContestService",
+    "ActiveDraftKingsContest",
+    "DraftKingsExportService",
+    "DraftKingsEntryTemplate",
+    "DraftKingsExportResult",
+    "DraftKingsExportError",
     "OptimizerService",
     "PlayerPoolService",
     "ActivePlayerPoolMetadata",

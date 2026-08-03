@@ -81,7 +81,7 @@ with st.sidebar:
     saved_minimum_salary = int(
         st.session_state.get(
             "minimum_salary",
-            0,
+            max(int(salary_cap) - 1000, 0),
         )
     )
 
@@ -539,6 +539,33 @@ metric_column_4.metric(
     ),
 )
 
+readiness_report = optimizer_service.assess_projection_readiness(
+    players=players,
+    settings=optimizer_settings,
+)
+
+if readiness_report.is_ready:
+    st.success(
+        "Projection readiness passed: "
+        f"{readiness_report.positive_projection_count} of "
+        f"{readiness_report.eligible_player_count} eligible players "
+        "have positive projections."
+    )
+else:
+    st.error(
+        "Optimization is blocked until the projection issues below are fixed."
+    )
+    for issue in readiness_report.critical_errors:
+        st.write(f"- {issue}")
+    st.page_link(
+        "pages/5_Weekly_Update.py",
+        label="Open Weekly Update to import or generate projections",
+        icon="🔄",
+    )
+
+for warning in readiness_report.warnings:
+    st.warning(warning)
+
 with st.expander(
     "Review active player pool"
 ):
@@ -809,6 +836,12 @@ generate_clicked = st.button(
     "Generate lineups",
     type="primary",
     use_container_width=True,
+    disabled=not readiness_report.is_ready,
+    help=(
+        None
+        if readiness_report.is_ready
+        else "Import or generate usable projections before optimizing."
+    ),
 )
 
 if generate_clicked:

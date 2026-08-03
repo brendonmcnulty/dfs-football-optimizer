@@ -10,7 +10,11 @@ from core.local_settings import get_odds_api_key
 from data_pipeline import DataSourceInput, PipelineResult, WeeklyDataPipeline
 from database import DatabaseManager
 from projection_engine import ProjectionEngine
-from services import PlayerPoolService
+from services import (
+    DraftKingsContestService,
+    DraftKingsExportService,
+    PlayerPoolService,
+)
 from services.odds_api_service import (
     OddsApiService,
     enrich_player_pool_with_vegas,
@@ -32,6 +36,10 @@ st.set_page_config(page_title="Weekly Update", page_icon="🔄", layout="wide")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_PLAYER_PATH = PROJECT_ROOT / "data" / "sample" / "sample_players.csv"
 player_pool_service = PlayerPoolService()
+draftkings_export_service = DraftKingsExportService()
+draftkings_contest_service = DraftKingsContestService(
+    draftkings_export_service
+)
 
 
 def _read_csv(uploaded_file) -> pd.DataFrame:
@@ -46,6 +54,7 @@ def _empty_pipeline_result(player_pool: pd.DataFrame) -> PipelineResult:
         coverage_report=pd.DataFrame(),
         source_report=pd.DataFrame(),
         unmatched_report=pd.DataFrame(),
+        duplicate_report=pd.DataFrame(),
     )
 
 
@@ -134,16 +143,33 @@ with st.sidebar:
 
 st.subheader("1. Choose the player-pool foundation")
 st.write(
-    "Upload a DraftKings salary CSV when contests are available. During the "
-    "offseason, reuse the active Player Pool or load the included sample data."
+    "For a live slate, upload `DKEntries.csv` from DraftKings Edit Entries. "
+    "That single file supplies the reserved entries, contest metadata, "
+    "DraftKings player IDs, salaries, and the slate player list."
 )
-salary_file = st.file_uploader(
-    "DraftKings salary CSV",
+
+entries_file = st.file_uploader(
+    "DraftKings DKEntries.csv",
+    type=["csv"],
+    key="weekly_entries_file",
+    help=(
+        "Reserve your contest entries first, then download DKEntries.csv "
+        "from DraftKings Edit Entries."
+    ),
+)
+
+legacy_salary_file = st.file_uploader(
+    "Optional fallback: DKSalaries.csv",
     type=["csv"],
     key="weekly_salary_file",
+    help=(
+        "Use this only when you are researching a slate without reserved "
+        "entries. A salary-only file cannot support bulk entry export."
+    ),
 )
 
 foundation_col_1, foundation_col_2 = st.columns(2)
+
 with foundation_col_1:
     active_pool_available = player_pool_service.has_active_pool(
         st.session_state
@@ -153,6 +179,7 @@ with foundation_col_1:
         disabled=not active_pool_available,
         use_container_width=True,
     )
+
 with foundation_col_2:
     load_sample_clicked = st.button(
         "Load included sample player pool",
@@ -162,7 +189,9 @@ with foundation_col_2:
 
 if use_active_clicked:
     result = _empty_pipeline_result(
-        player_pool_service.get_active_pool(st.session_state)
+        player_pool_service.get_active_pool(
+            st.session_state
+        )
     )
     metadata = _metadata(
         season,
@@ -172,13 +201,20 @@ if use_active_clicked:
         ["Active player pool"],
         aggregation,
     )
-    _set_pipeline_result(result, metadata)
-    st.success(f"Loaded {len(result.player_pool)} players from the active pool.")
+    _set_pipeline_result(
+        result,
+        metadata,
+    )
+    st.success(
+        f"Loaded {len(result.player_pool)} players from the active pool."
+    )
 
 if load_sample_clicked:
     try:
         result = pipeline.run(
-            salary_frame=pd.read_csv(SAMPLE_PLAYER_PATH),
+            salary_frame=pd.read_csv(
+                SAMPLE_PLAYER_PATH
+            ),
             data_sources=[],
             aggregation=aggregation,
         )
@@ -190,10 +226,46 @@ if load_sample_clicked:
             ["Included sample player pool"],
             aggregation,
         )
-        _set_pipeline_result(result, metadata)
-        st.success(f"Loaded {len(result.player_pool)} sample players.")
+        _set_pipeline_result(
+            result,
+            metadata,
+        )
+        st.success(
+            f"Loaded {len(result.player_pool)} sample players."
+        )
     except Exception as exc:
-        st.error(f"Could not load the sample player pool: {exc}")
+        st.error(
+            f"Could not load the sample player pool: {exc}"
+        )
+
+active_contest_metadata = (
+    draftkings_contest_service.get_metadata(
+        st.session_state
+    )
+)
+
+if active_contest_metadata is not None:
+    contest_columns = st.columns(4)
+    contest_columns[0].metric(
+        "Reserved entries",
+        active_contest_metadata.entry_count,
+    )
+    contest_columns[1].metric(
+        "Contests",
+        active_contest_metadata.contest_count,
+    )
+    contest_columns[2].metric(
+        "DraftKings players",
+        active_contest_metadata.player_count,
+    )
+    contest_columns[3].metric(
+        "Source",
+        active_contest_metadata.source_name,
+    )
+    st.success(
+        "DraftKings contest context is loaded and will be reused automatically "
+        "by DraftKings Export."
+    )
 
 st.subheader("2. Optional projection and ownership sources")
 st.write("Upload up to three provider CSVs. Players match by ID first, then name and team.")
@@ -214,15 +286,16 @@ for index, column in enumerate(source_columns, start=1):
         source_uploads.append((source_name, source_file))
 
 build_clicked = st.button(
-    "Build weekly player pool from uploaded salary file",
+    "Build weekly player pool",
     type="primary",
     use_container_width=True,
 )
+
 if build_clicked:
-    if salary_file is None:
+    if entries_file is None and legacy_salary_file is None:
         st.error(
-            "Upload a DraftKings salary CSV, or use one of the player-pool "
-            "buttons above."
+            "Upload DKEntries.csv, upload DKSalaries.csv, or use one of the "
+            "existing player-pool buttons above."
         )
     else:
         try:
@@ -234,8 +307,40 @@ if build_clicked:
                 for name, file in source_uploads
                 if file is not None
             ]
+
+            if entries_file is not None:
+                template = (
+                    draftkings_contest_service.set_active_contest(
+                        st.session_state,
+                        entries_file.getvalue(),
+                        source_name=entries_file.name,
+                    )
+                )
+                salary_frame = (
+                    draftkings_export_service.build_player_pool(
+                        template
+                    )
+                )
+                foundation_source = (
+                    f"DraftKings entries file: {entries_file.name}"
+                )
+                detected_slate_name = str(
+                    template.entries.iloc[0][
+                        "contest_name"
+                    ]
+                )
+            else:
+                salary_frame = _read_csv(
+                    legacy_salary_file
+                )
+                foundation_source = (
+                    f"DraftKings salary file: "
+                    f"{legacy_salary_file.name}"
+                )
+                detected_slate_name = slate_name
+
             result = pipeline.run(
-                salary_frame=_read_csv(salary_file),
+                salary_frame=salary_frame,
                 data_sources=sources,
                 aggregation=aggregation,
             )
@@ -243,14 +348,132 @@ if build_clicked:
                 season,
                 week,
                 site,
-                slate_name,
-                [source.name for source in sources],
+                (
+                    detected_slate_name
+                    if entries_file is not None
+                    else slate_name
+                ),
+                [
+                    foundation_source,
+                    *[
+                        source.name
+                        for source in sources
+                    ],
+                ],
                 aggregation,
             )
-            _set_pipeline_result(result, metadata)
-            st.success("Player pool built. Add Vegas data below.")
+            _set_pipeline_result(
+                result,
+                metadata,
+            )
+
+            player_pool_service.set_active_pool(
+                st.session_state,
+                result.player_pool,
+                source=foundation_source,
+                active_slate_name=(
+                    detected_slate_name
+                    if entries_file is not None
+                    else slate_name
+                ),
+                season=int(season),
+                week=int(week),
+                site=site,
+                slate_name=(
+                    detected_slate_name
+                    if entries_file is not None
+                    else slate_name
+                ),
+            )
+
+            if entries_file is not None:
+                st.success(
+                    "DraftKings entries, contest metadata, player IDs, and "
+                    "player pool are loaded. The Export page will reuse this "
+                    "file automatically."
+                )
+            else:
+                st.success(
+                    "Salary-only player pool built. Bulk entry export will "
+                    "still require a DKEntries.csv foundation."
+                )
         except Exception as exc:
-            st.error(f"Weekly update failed: {exc}")
+            st.error(
+                f"Weekly update failed: {exc}"
+            )
+
+if "weekly_pipeline_result" in st.session_state:
+    import_result = st.session_state.weekly_pipeline_result
+
+    if not import_result.source_report.empty:
+        st.subheader("Projection-source match report")
+        st.dataframe(
+            import_result.source_report,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "match_rate": st.column_config.ProgressColumn(
+                    "Match rate",
+                    min_value=0.0,
+                    max_value=1.0,
+                    format="percent",
+                ),
+            },
+        )
+
+    if not import_result.coverage_report.empty:
+        st.subheader("Imported metric coverage")
+        st.dataframe(
+            import_result.coverage_report,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "coverage": st.column_config.ProgressColumn(
+                    "Coverage",
+                    min_value=0.0,
+                    max_value=1.0,
+                    format="percent",
+                ),
+            },
+        )
+
+    if not getattr(import_result, "duplicate_report", pd.DataFrame()).empty:
+        st.error(
+            "Duplicate rows were found in one or more projection sources. "
+            "Those rows were excluded from the merge."
+        )
+        st.dataframe(
+            getattr(import_result, "duplicate_report", pd.DataFrame()),
+            width="stretch",
+            hide_index=True,
+        )
+        st.download_button(
+            "Download duplicate projection rows",
+            data=getattr(import_result, "duplicate_report", pd.DataFrame()).to_csv(
+                index=False
+            ).encode("utf-8"),
+            file_name="projection_duplicate_rows.csv",
+            mime="text/csv",
+        )
+
+    if not import_result.unmatched_report.empty:
+        st.warning(
+            f"{len(import_result.unmatched_report)} projection-source row(s) "
+            "could not be matched uniquely."
+        )
+        st.dataframe(
+            import_result.unmatched_report,
+            width="stretch",
+            hide_index=True,
+        )
+        st.download_button(
+            "Download unmatched projection rows",
+            data=import_result.unmatched_report.to_csv(
+                index=False
+            ).encode("utf-8"),
+            file_name="projection_unmatched_rows.csv",
+            mime="text/csv",
+        )
 
 st.markdown("---")
 st.subheader("3. Live Vegas data")

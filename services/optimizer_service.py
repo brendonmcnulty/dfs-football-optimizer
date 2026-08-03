@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pandas as pd
 
 from core.settings import OptimizerSettings
@@ -7,6 +9,23 @@ from optimizer.lineup_optimizer import (
     OptimizationResult,
     optimize_lineups,
 )
+
+
+@dataclass(frozen=True)
+class ProjectionReadinessReport:
+    """Readiness assessment for optimizing one player pool."""
+
+    positive_projection_count: int
+    eligible_player_count: int
+    projection_coverage: float
+    critical_errors: tuple[str, ...]
+    warnings: tuple[str, ...]
+
+    @property
+    def is_ready(self) -> bool:
+        """Return whether lineup generation may proceed."""
+
+        return not self.critical_errors
 
 
 class OptimizerService:
@@ -34,6 +53,171 @@ class OptimizerService:
         "TE",
         "DST",
     }
+
+    def assess_projection_readiness(
+        self,
+        players: pd.DataFrame,
+        settings: OptimizerSettings,
+    ) -> ProjectionReadinessReport:
+        """Check whether the selected strategy has usable player metrics."""
+
+        if players.empty:
+            return ProjectionReadinessReport(
+                positive_projection_count=0,
+                eligible_player_count=0,
+                projection_coverage=0.0,
+                critical_errors=("The player pool is empty.",),
+                warnings=(),
+            )
+
+        working = players.copy()
+
+        if "excluded" not in working.columns:
+            working["excluded"] = False
+
+        eligible = working.loc[
+            ~working["excluded"].fillna(False).astype(bool)
+        ].copy()
+
+        if eligible.empty:
+            return ProjectionReadinessReport(
+                positive_projection_count=0,
+                eligible_player_count=0,
+                projection_coverage=0.0,
+                critical_errors=(
+                    "Every player is excluded from the active pool.",
+                ),
+                warnings=(),
+            )
+
+        positions = (
+            eligible.get("position", pd.Series(index=eligible.index, dtype=str))
+            .astype(str)
+            .str.upper()
+            .str.strip()
+            .replace({"D/ST": "DST", "DEF": "DST"})
+        )
+        projections = pd.to_numeric(
+            eligible.get(
+                "projection",
+                pd.Series(0.0, index=eligible.index),
+            ),
+            errors="coerce",
+        ).fillna(0.0)
+
+        positive_projection = projections > 0
+        positive_count = int(positive_projection.sum())
+        eligible_count = int(len(eligible))
+        coverage = (
+            positive_count / eligible_count
+            if eligible_count
+            else 0.0
+        )
+
+        critical_errors: list[str] = []
+        warnings: list[str] = []
+
+        if positive_count == 0:
+            critical_errors.append(
+                "No eligible players have positive projections. Import or "
+                "generate projections in Weekly Update before optimizing."
+            )
+        elif positive_count < 9:
+            critical_errors.append(
+                "Fewer than nine eligible players have positive projections."
+            )
+
+        required_positive_counts = {
+            "QB": 1,
+            "RB": 2,
+            "WR": 3,
+            "TE": 1,
+            "DST": 1,
+        }
+        for position, minimum_count in required_positive_counts.items():
+            count = int(
+                (positive_projection & (positions == position)).sum()
+            )
+            if count < minimum_count:
+                critical_errors.append(
+                    f"At least {minimum_count} positive-projection "
+                    f"{position} player(s) are required; found {count}."
+                )
+
+        flex_count = int(
+            (
+                positive_projection
+                & positions.isin({"RB", "WR", "TE"})
+            ).sum()
+        )
+        if flex_count < 7:
+            critical_errors.append(
+                "At least seven positive-projection RB/WR/TE players are "
+                f"required to fill the skill and FLEX slots; found {flex_count}."
+            )
+
+        weights = settings.objective_weights
+        metric_requirements = {
+            "ceiling": "ceiling",
+            "floor": "floor",
+        }
+        for weight_name, column in metric_requirements.items():
+            if weights.get(weight_name, 0.0) <= 0:
+                continue
+            values = pd.to_numeric(
+                eligible.get(
+                    column,
+                    pd.Series(0.0, index=eligible.index),
+                ),
+                errors="coerce",
+            ).fillna(0.0)
+            if int((values > 0).sum()) < 9:
+                critical_errors.append(
+                    f"The selected strategy uses {column}, but fewer than "
+                    f"nine eligible players have positive {column} values."
+                )
+
+        if weights.get("leverage", 0.0) > 0:
+            ownership = pd.to_numeric(
+                eligible.get(
+                    "ownership",
+                    pd.Series(0.0, index=eligible.index),
+                ),
+                errors="coerce",
+            ).fillna(0.0)
+            ownership_coverage = float((ownership > 0).mean())
+            if ownership_coverage < 0.50:
+                critical_errors.append(
+                    "The selected strategy uses leverage, but projected "
+                    "ownership is populated for fewer than 50% of eligible "
+                    "players."
+                )
+
+        if 0 < coverage < 0.50:
+            warnings.append(
+                f"Only {coverage:.0%} of eligible players have positive "
+                "projections. Review the import coverage before generating."
+            )
+        elif 0.50 <= coverage < 0.80:
+            warnings.append(
+                f"Projection coverage is {coverage:.0%}. Unprojected players "
+                "will not be competitive unless locked."
+            )
+
+        if settings.minimum_salary < max(settings.salary_cap - 3000, 0):
+            warnings.append(
+                "The minimum salary setting allows more than $3,000 to remain "
+                "unused. A typical safeguard is $48,000-$49,000 for a "
+                "$50,000 DraftKings cap."
+            )
+
+        return ProjectionReadinessReport(
+            positive_projection_count=positive_count,
+            eligible_player_count=eligible_count,
+            projection_coverage=coverage,
+            critical_errors=tuple(dict.fromkeys(critical_errors)),
+            warnings=tuple(dict.fromkeys(warnings)),
+        )
 
     def validate_player_pool(
         self,
@@ -508,6 +692,16 @@ class OptimizerService:
         """Generate multiple unique, exposure-controlled lineups."""
 
         settings.validate()
+
+        readiness = self.assess_projection_readiness(
+            players=players,
+            settings=settings,
+        )
+        if not readiness.is_ready:
+            raise ValueError(
+                "Optimization blocked: "
+                + " ".join(readiness.critical_errors)
+            )
 
         prepared_players = (
             self.prepare_player_pool(players)

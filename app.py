@@ -134,6 +134,16 @@ st.markdown(
 
     Check application health, inspect player-data coverage, load an enriched
     offseason test slate, and run a Slate Analysis smoke test.
+
+    ### 15. AI Slate Analyst
+
+    Convert structured slate analysis into deterministic, metric-backed
+    recommendations and explanations.
+
+    ### 16. DraftKings Export
+
+    Upload DKEntries.csv, validate generated or saved NFL Classic lineups,
+    and download a completed DraftKings bulk-upload CSV.
     """
 )
 
