@@ -23,8 +23,8 @@ st.caption("DraftKings NFL Classic analytics and lineup optimization")
 
 st.markdown(
     """
-    Use the sidebar navigation to import player pools, manage saved slates,
-    run weekly data updates, generate optimized lineups, and review saved lineups.
+    Start with **Week 1 Readiness** for a single pre-lock checklist, then use
+    Weekly Update, Optimizer, and DraftKings Export to complete the slate workflow.
     """
 )
 
@@ -64,6 +64,11 @@ st.subheader("Application workflow")
 
 st.markdown(
     """
+    ### Week 1 Readiness
+
+    Review DraftKings entry status, projection and data coverage, portfolio health,
+    and final export validation in one pre-lock command center.
+
     ### 1. Player Pool
 
     Upload a DraftKings salary file or a combined salary and projection file.
@@ -142,8 +147,13 @@ st.markdown(
 
     ### 16. DraftKings Export
 
-    Upload DKEntries.csv, validate generated or saved NFL Classic lineups,
-    and download a completed DraftKings bulk-upload CSV.
+    Reuse the DKEntries.csv loaded on Weekly Update, validate generated or saved
+    NFL Classic lineups, and download a completed DraftKings bulk-upload CSV.
+
+    ### 17. Week 1 Readiness
+
+    Run the final pass/fail checklist and inspect salary, exposure, stack,
+    bring-back, duplicate, and concentration warnings before upload.
     """
 )
 

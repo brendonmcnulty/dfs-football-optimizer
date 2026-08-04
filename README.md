@@ -265,3 +265,20 @@ The service keeps the existing Streamlit session keys synchronized for compatibi
 - revision number
 
 Developer Diagnostics displays this metadata and a common data-coverage report.
+
+## Week 1 live-slate workflow
+
+1. Reserve the desired DraftKings entries and download `DKEntries.csv`.
+2. Upload `DKEntries.csv` on **Weekly Update**.
+3. Import or generate projections and, when available, ownership.
+4. Refresh Vegas, prior-week usage, and defensive matchup data.
+5. Activate the updated player pool.
+6. Generate the requested portfolio on **Optimizer**.
+7. Review **Week 1 Readiness** for projection coverage, salary usage,
+   duplicates, exposures, QB stacks, bring-backs, and entry-count coverage.
+8. Build and validate the file on **DraftKings Export**.
+9. Upload `DKEntries_completed.csv` to DraftKings and review its confirmation
+   screen before accepting changes.
+
+The application intentionally limits the export to the number of entries that
+were actually reserved in the uploaded `DKEntries.csv`.

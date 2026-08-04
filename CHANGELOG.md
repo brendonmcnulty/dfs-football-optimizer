@@ -1,3 +1,30 @@
+## v5.1.0 — Contest strategy presets
+
+### Added
+- Cash, Single-Entry GPP, 3-Max GPP, 20-Max GPP, and 150-Max GPP presets.
+- Preset previews explaining recommended salary, correlation, uniqueness, ownership, and exposure defaults.
+- One-click application of presets while keeping every optimizer control editable.
+- Applied preset metadata saved with generated lineup settings.
+
+### Notes
+- Presets are starting points, not guarantees of profitability.
+- Player exposure defaults should be reviewed against the slate, contest size, and projection confidence.
+
+## v5.0.0 — Week 1 Ready
+
+### Added
+- Week 1 Readiness Center with a unified pre-lock checklist.
+- Portfolio health reporting for salary usage, projection, ceiling, ownership,
+  duplicate lineups, unique players, QB exposure, team exposure, game exposure,
+  QB stack frequency, and opponent bring-backs.
+- Direct links from failed readiness checks to the page that resolves them.
+- Upload-readiness status combining DKEntries, active player pool, projection
+  coverage, generated lineup count, reserved entries, and export validation.
+
+### Changed
+- Home workflow now identifies Week 1 Readiness as the final command center.
+- Preseason feature expansion is frozen in favor of reliability and live-week use.
+
 ## v4.6.0 — Projection readiness and salary safeguards
 
 ### Added

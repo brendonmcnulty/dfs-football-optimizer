@@ -6,10 +6,74 @@ import pandas as pd
 import streamlit as st
 
 from config import SALARY_CAP
+from core.contest_presets import (
+    CONTEST_STRATEGY_PRESETS,
+    get_contest_strategy_preset,
+)
 from core.settings import OptimizerSettings
 from database import DatabaseManager
 from data_loader import add_derived_metrics
 from services import OptimizerService, PlayerPoolService
+
+
+def _apply_contest_preset(
+    preset_key: str,
+    player_ids: list[str],
+    teams: list[str],
+) -> None:
+    """Apply one contest preset to editable Streamlit state."""
+
+    preset = get_contest_strategy_preset(preset_key)
+
+    settings = {
+        "minimum_salary": preset.minimum_salary,
+        "lineup_count": preset.lineup_count,
+        "minimum_unique_players": preset.minimum_unique_players,
+        "qb_stack_size": preset.qb_stack_size,
+        "require_bring_back": preset.require_bring_back,
+        "maximum_players_per_team": preset.maximum_players_per_team,
+        "minimum_players_from_primary_game": (
+            preset.minimum_players_from_primary_game
+        ),
+        "maximum_players_per_game": preset.maximum_players_per_game,
+        "optimization_target": preset.optimization_target,
+        "limit_total_ownership": preset.limit_total_ownership,
+        "maximum_total_ownership": (
+            preset.maximum_total_ownership
+            if preset.maximum_total_ownership is not None
+            else 150.0
+        ),
+        "block_dst_opposing_qb": True,
+        "block_dst_opposing_wr": True,
+        "block_dst_opposing_rb": False,
+        "block_dst_opposing_te": False,
+    }
+
+    for key, value in settings.items():
+        st.session_state[key] = value
+
+    st.session_state.player_max_exposures = {
+        str(player_id): preset.default_player_max_exposure
+        for player_id in player_ids
+    }
+    st.session_state.team_max_exposures = {
+        str(team).upper(): 1.0
+        for team in teams
+    }
+
+    for editor_key in (
+        "maximum_exposure_editor",
+        "team_exposure_editor",
+    ):
+        st.session_state.pop(editor_key, None)
+
+    for generated_key in tuple(st.session_state):
+        if str(generated_key).startswith("generated_"):
+            st.session_state.pop(generated_key, None)
+
+    st.session_state.applied_contest_preset = preset.key
+    st.session_state.applied_contest_preset_label = preset.label
+
 
 
 st.set_page_config(
@@ -66,6 +130,60 @@ if active_slate_id is None:
 with st.sidebar:
     st.header("Optimizer settings")
 
+    st.subheader("Contest strategy preset")
+
+    preset_options = ["custom", *CONTEST_STRATEGY_PRESETS.keys()]
+    selected_preset = st.selectbox(
+        "Contest strategy",
+        options=preset_options,
+        key="contest_strategy_preset_selector",
+        format_func=lambda value: (
+            "Custom"
+            if value == "custom"
+            else CONTEST_STRATEGY_PRESETS[value].label
+        ),
+        help=(
+            "Choose a contest type, review the recommended defaults, then "
+            "apply them. Every setting remains editable afterward."
+        ),
+    )
+
+    if selected_preset == "custom":
+        st.caption(
+            "Custom leaves the current optimizer settings unchanged."
+        )
+    else:
+        preset_preview = CONTEST_STRATEGY_PRESETS[selected_preset]
+        st.info(preset_preview.description)
+
+        with st.expander("Preview preset settings", expanded=False):
+            for setting_name, setting_value in preset_preview.summary_rows:
+                st.write(f"**{setting_name}:** {setting_value}")
+
+        if st.button(
+            "Apply contest preset",
+            type="primary",
+            use_container_width=True,
+            key="apply_contest_preset",
+        ):
+            _apply_contest_preset(
+                selected_preset,
+                players["player_id"].astype(str).tolist(),
+                players["team"].astype(str).unique().tolist(),
+            )
+            st.rerun()
+
+    applied_preset_label = st.session_state.get(
+        "applied_contest_preset_label"
+    )
+    if applied_preset_label:
+        st.success(
+            f"Applied preset: {applied_preset_label}. "
+            "Any control can now be customized."
+        )
+
+    st.markdown("---")
+
     salary_cap = st.number_input(
         "Salary cap",
         min_value=1,
@@ -76,6 +194,7 @@ with st.sidebar:
             )
         ),
         step=500,
+        key="salary_cap",
     )
 
     saved_minimum_salary = int(
@@ -94,6 +213,7 @@ with st.sidebar:
             int(salary_cap),
         ),
         step=100,
+        key="minimum_salary",
     )
 
     lineup_count = st.number_input(
@@ -107,6 +227,7 @@ with st.sidebar:
             )
         ),
         step=1,
+        key="lineup_count",
     )
 
     minimum_unique_players = st.slider(
@@ -123,6 +244,7 @@ with st.sidebar:
             "Each generated lineup must differ from every earlier "
             "lineup by at least this many players."
         ),
+        key="minimum_unique_players",
     )
 
     qb_stack_size = st.selectbox(
@@ -153,26 +275,7 @@ with st.sidebar:
             "Require the selected quarterback to be paired with "
             "one or two same-team WR/TE pass catchers."
         ),
-    )
-
-    st.session_state.salary_cap = int(
-        salary_cap
-    )
-
-    st.session_state.minimum_salary = int(
-        minimum_salary
-    )
-
-    st.session_state.lineup_count = int(
-        lineup_count
-    )
-
-    st.session_state.minimum_unique_players = int(
-        minimum_unique_players
-    )
-
-    st.session_state.qb_stack_size = int(
-        qb_stack_size
+        key="qb_stack_size",
     )
 
     require_bring_back = st.checkbox(
@@ -187,10 +290,7 @@ with st.sidebar:
             "Require at least one opposing RB, WR, or TE "
             "for the selected quarterback."
         ),
-    )
-
-    st.session_state.require_bring_back = bool(
-        require_bring_back
+        key="require_bring_back",
     )
 
     maximum_players_per_team = st.selectbox(
@@ -209,10 +309,7 @@ with st.sidebar:
             "Limit how many players from the same NFL team may "
             "appear in one lineup."
         ),
-    )
-
-    st.session_state.maximum_players_per_team = (
-        maximum_players_per_team
+        key="maximum_players_per_team",
     )
 
     st.subheader("Defense correlation")
@@ -225,6 +322,7 @@ with st.sidebar:
                 True,
             )
         ),
+        key="block_dst_opposing_qb",
     )
 
     block_opposing_wr = st.checkbox(
@@ -235,6 +333,7 @@ with st.sidebar:
                 True,
             )
         ),
+        key="block_dst_opposing_wr",
     )
 
     block_opposing_rb = st.checkbox(
@@ -245,6 +344,7 @@ with st.sidebar:
                 False,
             )
         ),
+        key="block_dst_opposing_rb",
     )
 
     block_opposing_te = st.checkbox(
@@ -255,12 +355,8 @@ with st.sidebar:
                 False,
             )
         ),
+        key="block_dst_opposing_te",
     )
-
-    st.session_state.block_dst_opposing_qb = block_opposing_qb
-    st.session_state.block_dst_opposing_wr = block_opposing_wr
-    st.session_state.block_dst_opposing_rb = block_opposing_rb
-    st.session_state.block_dst_opposing_te = block_opposing_te
 
     st.subheader("Game stacking")
 
@@ -280,6 +376,7 @@ with st.sidebar:
             "Require at least one game to supply this many players "
             "to every generated lineup."
         ),
+        key="minimum_players_from_primary_game",
     )
 
     maximum_players_per_game = st.selectbox(
@@ -298,13 +395,7 @@ with st.sidebar:
             "Limit the total players drawn from either side of the "
             "same NFL game."
         ),
-    )
-
-    st.session_state.minimum_players_from_primary_game = (
-        minimum_players_from_primary_game
-    )
-    st.session_state.maximum_players_per_game = (
-        maximum_players_per_game
+        key="maximum_players_per_game",
     )
 
     st.subheader("Optimization strategy")
@@ -339,9 +430,8 @@ with st.sidebar:
             "Choose a ready-made contest strategy or build your own "
             "weighted optimization formula."
         ),
+        key="optimization_target",
     )
-    st.session_state.optimization_target = optimization_target
-
     preset_weights = {
         "projection": (100, 0, 0, 0, 0),
         "ceiling": (0, 100, 0, 0, 0),
@@ -432,6 +522,7 @@ with st.sidebar:
             "Cap the sum of projected ownership percentages across "
             "the nine selected players."
         ),
+        key="limit_total_ownership",
     )
 
     maximum_total_ownership = None
@@ -452,14 +543,7 @@ with st.sidebar:
                 "Example: 150 means the nine-player lineup may sum "
                 "to no more than 150% projected ownership."
             ),
-        )
-
-    st.session_state.limit_total_ownership = bool(
-        limit_total_ownership
-    )
-    if maximum_total_ownership is not None:
-        st.session_state.maximum_total_ownership = float(
-            maximum_total_ownership
+            key="maximum_total_ownership",
         )
 
 blocked_dst_opposing_positions = tuple(
@@ -905,6 +989,14 @@ if generate_clicked:
         )
 
         st.session_state.generated_lineup_settings = {
+            "contest_preset": st.session_state.get(
+                "applied_contest_preset",
+                "custom",
+            ),
+            "contest_preset_label": st.session_state.get(
+                "applied_contest_preset_label",
+                "Custom",
+            ),
             "salary_cap": int(
                 optimizer_settings.salary_cap
             ),
