@@ -10,6 +10,7 @@ from data_loader import (
     COLUMN_ALIASES,
     _find_column,
     add_derived_metrics,
+    coerce_numeric,
     normalize_player_pool,
 )
 
@@ -88,9 +89,8 @@ def _normalize_source(
     for metric in METRIC_COLUMNS:
         found = _find_column(columns, COLUMN_ALIASES[metric])
         if found is not None:
-            output[metric] = pd.to_numeric(
-                frame[found],
-                errors="coerce",
+            output[metric] = coerce_numeric(
+                frame[found]
             )
             found_metrics.append(metric)
 
@@ -312,6 +312,11 @@ class WeeklyDataPipeline:
                         if len(normalized)
                         else 0.0
                     ),
+                    "metrics_detected": ", ".join(
+                        metric
+                        for metric in METRIC_COLUMNS
+                        if metric in normalized.columns
+                    ),
                 }
             )
 
@@ -367,6 +372,24 @@ class WeeklyDataPipeline:
             player_pool["ownership"],
             errors="coerce",
         ).fillna(0.0).clip(0.0, 100.0)
+
+        # Preserve whether ownership was actually supplied by a projection
+        # provider. A legitimate projected ownership of 0.0 is still populated
+        # data and must not be confused with a missing ownership value that was
+        # defaulted to zero during normalization.
+        if contribution_frame.empty:
+            ownership_covered_indexes: set[int] = set()
+        else:
+            ownership_covered_indexes = set(
+                contribution_frame.loc[
+                    contribution_frame["metric"] == "ownership",
+                    "base_index",
+                ].astype(int)
+            )
+        player_pool["ownership_imported"] = player_pool.index.to_series().map(
+            lambda index: int(index) in ownership_covered_indexes
+        )
+
         player_pool = add_derived_metrics(
             player_pool
         )

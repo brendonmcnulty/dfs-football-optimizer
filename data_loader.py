@@ -30,26 +30,28 @@ COLUMN_ALIASES = {
         "opponent", "opp", "opponent team",
     ],
     "salary": [
-        "salary", "dk salary", "draftkings salary",
+        "salary", "dk salary", "draftkings salary", "dk sal",
     ],
     "game_info": [
         "game info", "game_info", "game", "matchup",
     ],
     "projection": [
         "projection", "proj", "fpts", "fantasy points", "projected points",
-        "dk projection", "dk points", "proj fpts", "projected fpts", "median", "mean projection",
+        "dk projection", "dk points", "dk proj", "proj fpts",
+        "projected fpts", "median", "mean projection",
     ],
     "ceiling": [
-        "ceiling", "ceiling projection", "ceiling_projection", "p90",
-        "90th percentile", "upside", "max projection",
+        "ceiling", "ceiling projection", "ceiling_projection", "dk ceiling",
+        "dk ceil", "p90", "90th percentile", "upside", "max projection",
     ],
     "floor": [
-        "floor", "floor projection", "floor_projection", "p10",
+        "floor", "floor projection", "floor_projection", "dk floor", "p10",
         "10th percentile", "downside", "min projection",
     ],
     "ownership": [
         "ownership", "ownership pct", "ownership %", "ownership percentage",
         "projected ownership", "projected_ownership", "proj own", "own%",
+        "dk pown%", "dk pown pct", "dk projected ownership",
     ],
     "confidence": [
         "confidence", "confidence score", "projection confidence",
@@ -94,6 +96,23 @@ def _clean_player_id(value: object) -> str:
         text = text[:-2]
     match = re.search(r"\((\d+)\)\s*$", text)
     return match.group(1) if match else text
+
+
+def coerce_numeric(series: pd.Series) -> pd.Series:
+    """Convert provider-formatted numeric values such as 33.9%, $8,000, or 3.1."""
+
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.to_numeric(series, errors="coerce")
+
+    cleaned = (
+        series.astype(str)
+        .str.strip()
+        .str.replace(",", "", regex=False)
+        .str.replace("$", "", regex=False)
+        .str.replace("%", "", regex=False)
+        .replace({"": pd.NA, "nan": pd.NA, "None": pd.NA, "N/A": pd.NA})
+    )
+    return pd.to_numeric(cleaned, errors="coerce")
 
 
 def _opponent_from_game_info(game_info: object, team: object) -> str:
@@ -176,9 +195,8 @@ def normalize_player_pool(frame: pd.DataFrame) -> pd.DataFrame:
         .str.upper()
         .str.strip()
     )
-    output["salary"] = pd.to_numeric(
-        output["salary"],
-        errors="coerce",
+    output["salary"] = coerce_numeric(
+        output["salary"]
     )
 
     if "player_id" in output:
@@ -242,21 +260,17 @@ def normalize_player_pool(frame: pd.DataFrame) -> pd.DataFrame:
         if column not in output:
             output[column] = default
 
-    output["projection"] = pd.to_numeric(
-        output["projection"],
-        errors="coerce",
+    output["projection"] = coerce_numeric(
+        output["projection"]
     ).fillna(0.0)
-    output["ceiling"] = pd.to_numeric(
-        output["ceiling"],
-        errors="coerce",
+    output["ceiling"] = coerce_numeric(
+        output["ceiling"]
     ).fillna(output["projection"])
-    output["floor"] = pd.to_numeric(
-        output["floor"],
-        errors="coerce",
+    output["floor"] = coerce_numeric(
+        output["floor"]
     ).fillna(output["projection"])
-    output["ownership"] = pd.to_numeric(
-        output["ownership"],
-        errors="coerce",
+    output["ownership"] = coerce_numeric(
+        output["ownership"]
     ).fillna(0.0).clip(0.0, 100.0)
     output["confidence"] = pd.to_numeric(
         output["confidence"],
@@ -428,9 +442,8 @@ def merge_projections(
             continue
 
         for metric, source_column in metric_columns.items():
-            value = pd.to_numeric(
-                pd.Series([source_row[source_column]]),
-                errors="coerce",
+            value = coerce_numeric(
+                pd.Series([source_row[source_column]])
             ).iloc[0]
             if pd.notna(value):
                 base.at[base_index, metric] = float(value)

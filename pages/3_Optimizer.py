@@ -1615,6 +1615,61 @@ if selected_lineup_saved:
         f"lineup #{saved_lineup_id}."
     )
 
+st.markdown("#### Save generated portfolio")
+portfolio_prefix = st.text_input(
+    "Portfolio name prefix",
+    value=(
+        f"{generated_settings.get('contest_preset_label', 'Portfolio')} - "
+        + datetime.now().strftime("%Y-%m-%d")
+    ),
+    key="generated_portfolio_name_prefix",
+    help="Each lineup is saved with this prefix plus Lineup 01, Lineup 02, etc.",
+)
+
+unsaved_count = sum(
+    index not in saved_generated_lineups
+    for index in range(generated_count)
+)
+
+save_all_clicked = st.button(
+    f"Save all generated lineups to database ({unsaved_count} unsaved)",
+    use_container_width=True,
+    disabled=(active_slate_id is None or unsaved_count == 0),
+)
+
+if save_all_clicked:
+    try:
+        saved_now = 0
+        for index, lineup in enumerate(generated_lineups):
+            if index in saved_generated_lineups:
+                continue
+            metadata = generated_metadata[index]
+            lineup_id = database.save_lineup(
+                slate_id=int(active_slate_id),
+                lineup=lineup.copy(),
+                lineup_name=(
+                    f"{portfolio_prefix.strip()} - Lineup {index + 1:02d}"
+                ),
+                total_salary=int(metadata["total_salary"]),
+                total_projection=float(metadata["total_projection"]),
+                solver_status=str(metadata["status"]),
+                salary_cap=generated_salary_cap,
+                minimum_salary=int(generated_settings["minimum_salary"]),
+            )
+            saved_generated_lineups[index] = lineup_id
+            saved_now += 1
+
+        st.session_state.saved_generated_lineups = saved_generated_lineups
+        st.success(f"Saved {saved_now} generated lineups to the database.")
+        st.rerun()
+    except Exception as exc:
+        st.error(f"Could not save generated portfolio: {exc}")
+
+if unsaved_count == 0 and generated_count > 0:
+    st.success(
+        f"All {generated_count} generated lineups are saved in the database."
+    )
+
 selected_export = selected_lineup[
     [
         "roster_slot",

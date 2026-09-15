@@ -6,6 +6,7 @@ from repositories.historical_repository import HistoricalRepository
 from repositories.game_repository import GameRepository
 from repositories.slate_repository import SlateRepository
 from repositories.warehouse_repository import WarehouseRepository
+from repositories.contest_results_repository import ContestResultsRepository
 
 __all__ = [
     "DataUpdateRepository",
@@ -14,4 +15,5 @@ __all__ = [
     "GameRepository",
     "SlateRepository",
     "WarehouseRepository",
+    "ContestResultsRepository",
 ]

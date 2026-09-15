@@ -103,10 +103,14 @@ class DraftKingsExportService:
             )
 
         entry_records: list[dict[str, object]] = []
-        for row_number, row in enumerate(
-            rows[1:salary_header_index],
-            start=2,
-        ):
+        # DraftKings may begin the embedded salary table while additional
+        # contest-entry rows continue in columns A-M. In that format the
+        # salary header can appear on the same row as a valid reserved entry,
+        # and later rows can contain both an entry and a salary-table player.
+        # Therefore entry parsing must scan the full file, not stop when the
+        # embedded salary table begins. Player-only salary rows have a blank
+        # Entry ID and are ignored naturally.
+        for row_number, row in enumerate(rows[1:], start=2):
             padded = self._pad_row(row, len(header))
             entry_id = padded[0].strip()
             if not entry_id:

@@ -268,7 +268,11 @@ if active_contest_metadata is not None:
     )
 
 st.subheader("2. Optional projection and ownership sources")
-st.write("Upload up to three provider CSVs. Players match by ID first, then name and team.")
+st.write(
+    "Upload up to three provider CSVs. Players match by DraftKings ID first, "
+    "then normalized name and team. Raw CPenn DFS exports are supported "
+    "directly, including `DK Proj`, `DK Floor`, `DK Ceil`, and `DK pOWN%`."
+)
 source_columns = st.columns(3)
 source_uploads = []
 for index, column in enumerate(source_columns, start=1):
@@ -922,6 +926,14 @@ if "weekly_pipeline_result" in st.session_state:
                 slate_id=slate_id,
                 players=player_pool,
             )
+            active_dk_template = draftkings_contest_service.get_active_template(st.session_state)
+            saved_entry_count = 0
+            if active_dk_template is not None:
+                saved_entry_count = database.save_draftkings_entries(
+                    slate_id=slate_id,
+                    entries=active_dk_template.entries,
+                    source_name=active_dk_template.source_name,
+                )
             if player_pool_service.has_active_pool(st.session_state):
                 player_pool_service.set_active_pool(
                     st.session_state,
@@ -937,7 +949,7 @@ if "weekly_pipeline_result" in st.session_state:
                     site=metadata["site"],
                     slate_name=metadata["slate_name"],
                 )
-            st.success(f"Saved {saved_count} players to the slate database.")
+            st.success(f"Saved {saved_count} players and {saved_entry_count} DraftKings reserved entries to the slate database.")
         except Exception as exc:
             st.error(f"Could not save the updated slate: {exc}")
 else:

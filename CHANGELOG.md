@@ -1,3 +1,55 @@
+## v5.1.7 — Week Results & Portfolio Tracking
+
+### Added
+- Save all generated optimizer lineups to the database in one click, while safely skipping lineups already saved individually.
+- New Week Results page for importing raw DraftKings contest-standings ZIP files.
+- Optional DraftKings Contest Entry History import for personal entry identification, winnings, cash rate, and ROI.
+- Contest standings, actual ownership, and actual fantasy points persistence.
+- Automatic write-back of DraftKings player actuals into Historical Results and the Historical Warehouse.
+- Projection-vs-actual and projected-ownership-vs-actual-ownership post-slate review.
+
+## v5.1.6 — DraftKings interleaved entry parsing fix
+
+### Fixed
+- Reads all reserved DraftKings entries even when the embedded salary table begins before the final entry row.
+- Supports DKEntries files where contest-entry columns and salary-table columns coexist on the same rows.
+- Prevents Weekly Update and DraftKings Export from undercounting reserved entries in this DraftKings file layout.
+
+## v5.1.5 — Provider floor compatibility
+
+### Fixed
+- Allows legitimate negative DFS floor estimates from projection providers.
+- Keeps validation for invalid/negative projections and ceilings.
+- Prevents CPenn downside estimates from blocking lineup generation.
+
+## v5.1.4 - Ownership provenance readiness fix
+
+- Preserves whether projected ownership was actually supplied by an imported provider.
+- Treats an imported 0.0% ownership estimate as valid populated ownership instead of missing data.
+- Keeps the conservative positive-ownership fallback for older/manual player pools without provenance metadata.
+- Prevents CPenn-style feeds from being falsely blocked when low-owned projected players legitimately carry 0.0% ownership.
+
+## v5.1.3 — Live-slate readiness fix
+
+### Fixed
+- Leverage/ownership readiness now measures coverage only across players with
+  positive projections instead of every DraftKings-listed deep reserve.
+- Low full-pool projection coverage remains an informational warning rather
+  than blocking optimization when the projected candidate pool is healthy.
+
+## v5.1.2 — Native CPenn DFS projection import
+
+### Added
+- Native aliases for CPenn DFS `DK Proj`, `DK Floor`, `DK Ceil`, and `DK pOWN%` columns.
+- Provider-formatted numeric parsing for percentages, dollar signs, and comma-separated values.
+- Projection-source report now lists the metrics detected from each uploaded source.
+- Weekly Update explicitly documents raw CPenn DFS CSV support.
+
+### Week 1 workflow
+- Upload the real DraftKings `DKEntries.csv` as the player-pool foundation.
+- Upload the untouched CPenn `nfl_projections.csv` as a projection source.
+- No manual spreadsheet renaming or percentage cleanup is required.
+
 ## v5.1.0 — Contest strategy presets
 
 ### Added
@@ -81,3 +133,14 @@ All notable changes to this project will be documented in this file.
 
 - The AI Slate Analyst does not call an external language model.
 - Every statement is derived from the active player pool and `SlateAnalysisService` output.
+
+## v5.1.8 — Reserved-entry results matching
+
+### Added
+- Persists DraftKings reserved entry IDs with saved slates for automatic post-slate matching.
+- Week Results can use the slate's DKEntries.csv directly for older slates; full Contest Entry History is no longer required to identify your entries.
+- Adds an unmatched-player audit so DraftKings results that do not map to the saved slate are visible and downloadable.
+
+### Changed
+- Contest Entry History is now optional finance detail for exact winnings, places-paid, cash-rate, and ROI.
+- Weekly Update saves active DraftKings entry metadata whenever the slate is saved.

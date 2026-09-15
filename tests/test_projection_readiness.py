@@ -80,3 +80,126 @@ def test_leverage_strategy_requires_ownership_coverage() -> None:
         "projected ownership" in error
         for error in report.critical_errors
     )
+
+
+def test_leverage_uses_positive_projection_candidates_for_ownership_coverage() -> None:
+    projected = _players(10.0)
+
+    # Mimic a real provider feed: the relevant players have projections and
+    # ownership, while DraftKings also lists hundreds of deep reserves with
+    # neither metric.
+    reserve_rows = []
+    for index in range(400):
+        reserve_rows.append(
+            {
+                "player_id": f"reserve-{index}",
+                "name": f"Reserve {index}",
+                "position": "WR",
+                "team": "RES",
+                "opponent": "OPP",
+                "salary": 3000,
+                "projection": 0.0,
+                "ceiling": 0.0,
+                "floor": 0.0,
+                "ownership": 0.0,
+                "locked": False,
+                "excluded": False,
+            }
+        )
+
+    players = pd.concat(
+        [projected, pd.DataFrame(reserve_rows)],
+        ignore_index=True,
+    )
+
+    report = OptimizerService().assess_projection_readiness(
+        players,
+        OptimizerSettings(
+            optimization_target="large_field_gpp",
+        ),
+    )
+
+    assert report.is_ready
+    assert report.positive_projection_count == len(projected)
+    assert any(
+        "full DraftKings player pool" in warning
+        for warning in report.warnings
+    )
+
+
+def test_leverage_still_blocks_when_projected_candidates_lack_ownership() -> None:
+    players = _players(10.0)
+    players.loc[players.index[:6], "ownership"] = 0.0
+
+    report = OptimizerService().assess_projection_readiness(
+        players,
+        OptimizerSettings(
+            optimization_target="large_field_gpp",
+        ),
+    )
+
+    assert not report.is_ready
+    assert any(
+        "positive projections" in error
+        for error in report.critical_errors
+    )
+
+
+def test_zero_percent_imported_ownership_counts_as_populated() -> None:
+    players = _players(10.0)
+    players["ownership"] = 0.0
+    players["ownership_imported"] = True
+
+    report = OptimizerService().assess_projection_readiness(
+        players,
+        OptimizerSettings(
+            optimization_target="large_field_gpp",
+        ),
+    )
+
+    assert report.is_ready
+
+
+def test_missing_imported_ownership_marker_still_blocks_candidates() -> None:
+    players = _players(10.0)
+    players["ownership"] = 0.0
+    players["ownership_imported"] = True
+    players.loc[players.index[:6], "ownership_imported"] = False
+
+    report = OptimizerService().assess_projection_readiness(
+        players,
+        OptimizerSettings(
+            optimization_target="large_field_gpp",
+        ),
+    )
+
+    assert not report.is_ready
+    assert any(
+        "projected ownership" in error
+        for error in report.critical_errors
+    )
+
+def test_negative_floor_is_valid_model_input() -> None:
+    players = _players(10.0)
+    players.loc[players.index[0], "floor"] = -2.5
+
+    service = OptimizerService()
+
+    # Negative floors are legitimate downside estimates and should not
+    # invalidate an otherwise usable player pool.
+    service.validate_player_pool(players)
+
+
+def test_negative_ceiling_is_still_invalid() -> None:
+    players = _players(10.0)
+    players.loc[players.index[0], "ceiling"] = -1.0
+
+    service = OptimizerService()
+
+    try:
+        service.validate_player_pool(players)
+    except ValueError as exc:
+        assert "ceiling values cannot be negative" in str(exc)
+    else:
+        raise AssertionError("Negative ceiling should fail validation.")
+

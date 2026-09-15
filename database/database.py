@@ -12,6 +12,7 @@ from repositories import (
     LineupRepository,
     SlateRepository,
     WarehouseRepository,
+    ContestResultsRepository,
 )
 
 
@@ -60,6 +61,10 @@ class DatabaseManager:
         )
 
         self.warehouse_repository = WarehouseRepository(
+            database_path=self.database_path,
+        )
+
+        self.contest_results_repository = ContestResultsRepository(
             database_path=self.database_path,
         )
 
@@ -269,6 +274,84 @@ class DatabaseManager:
 
             connection.execute(
                 """
+                CREATE TABLE IF NOT EXISTS dk_contests (
+                    contest_id INTEGER PRIMARY KEY,
+                    slate_id INTEGER NOT NULL,
+                    contest_name TEXT NOT NULL DEFAULT '',
+                    field_size INTEGER NOT NULL DEFAULT 0,
+                    imported_at TEXT NOT NULL,
+                    FOREIGN KEY (slate_id) REFERENCES slates(id) ON DELETE CASCADE
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dk_reserved_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    slate_id INTEGER NOT NULL,
+                    contest_id INTEGER NOT NULL,
+                    contest_name TEXT NOT NULL DEFAULT '',
+                    entry_id TEXT NOT NULL,
+                    entry_fee REAL NOT NULL DEFAULT 0,
+                    source_name TEXT NOT NULL DEFAULT '',
+                    FOREIGN KEY (slate_id) REFERENCES slates(id) ON DELETE CASCADE,
+                    UNIQUE(slate_id, entry_id)
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dk_contest_standings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    contest_id INTEGER NOT NULL,
+                    entry_id TEXT NOT NULL,
+                    entry_name TEXT NOT NULL,
+                    rank INTEGER NOT NULL,
+                    points REAL NOT NULL,
+                    lineup_text TEXT NOT NULL,
+                    FOREIGN KEY (contest_id) REFERENCES dk_contests(contest_id) ON DELETE CASCADE,
+                    UNIQUE(contest_id, entry_id)
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dk_contest_player_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    contest_id INTEGER NOT NULL,
+                    player_name TEXT NOT NULL,
+                    roster_position TEXT NOT NULL,
+                    actual_ownership REAL NOT NULL,
+                    actual_points REAL NOT NULL,
+                    FOREIGN KEY (contest_id) REFERENCES dk_contests(contest_id) ON DELETE CASCADE,
+                    UNIQUE(contest_id, player_name)
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dk_user_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    contest_id INTEGER NOT NULL,
+                    entry_id TEXT NOT NULL,
+                    place INTEGER NOT NULL,
+                    points REAL NOT NULL,
+                    winnings REAL NOT NULL DEFAULT 0,
+                    entry_fee REAL NOT NULL DEFAULT 0,
+                    contest_entries INTEGER NOT NULL DEFAULT 0,
+                    places_paid INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY (contest_id) REFERENCES dk_contests(contest_id) ON DELETE CASCADE,
+                    UNIQUE(contest_id, entry_id)
+                )
+                """
+            )
+
+            connection.execute(
+                """
                 CREATE TABLE IF NOT EXISTS lineup_players (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     lineup_id INTEGER NOT NULL,
@@ -459,6 +542,41 @@ class DatabaseManager:
         return self.slate_repository.load_player_pool(
             slate_id=slate_id,
         )
+
+    def save_draftkings_entries(
+        self,
+        slate_id: int,
+        entries: pd.DataFrame,
+        source_name: str = "DKEntries.csv",
+    ) -> int:
+        """Persist reserved DraftKings entry IDs for post-slate matching."""
+        if entries is None or entries.empty:
+            return 0
+        with self.connect() as connection:
+            connection.execute("DELETE FROM dk_reserved_entries WHERE slate_id = ?", (int(slate_id),))
+            saved = 0
+            for _, row in entries.iterrows():
+                fee_text = str(row.get("entry_fee", "0")).replace("$", "").replace(",", "").strip()
+                try:
+                    fee = float(fee_text or 0)
+                except ValueError:
+                    fee = 0.0
+                contest_text = str(row.get("contest_id", "")).strip()
+                if not contest_text or not str(row.get("entry_id", "")).strip():
+                    continue
+                connection.execute(
+                    """INSERT INTO dk_reserved_entries
+                       (slate_id, contest_id, contest_name, entry_id, entry_fee, source_name)
+                       VALUES (?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(slate_id, entry_id) DO UPDATE SET
+                         contest_id=excluded.contest_id, contest_name=excluded.contest_name,
+                         entry_fee=excluded.entry_fee, source_name=excluded.source_name""",
+                    (int(slate_id), int(float(contest_text)), str(row.get("contest_name", "")),
+                     str(row.get("entry_id", "")).strip(), fee, str(source_name)),
+                )
+                saved += 1
+            connection.commit()
+        return saved
 
     def save_lineup(
         self,

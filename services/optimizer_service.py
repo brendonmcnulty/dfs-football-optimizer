@@ -185,18 +185,47 @@ class OptimizerService:
                 ),
                 errors="coerce",
             ).fillna(0.0)
-            ownership_coverage = float((ownership > 0).mean())
+
+            # Ownership coverage should be judged against players the optimizer
+            # can realistically select, not every deep reserve listed by
+            # DraftKings. Providers such as CPenn intentionally omit projections
+            # for many inactive/depth players while supplying ownership for the
+            # full projected candidate set.
+            optimizer_candidates = positive_projection
+            candidate_count = int(optimizer_candidates.sum())
+            # If the weekly import pipeline preserved ownership provenance,
+            # use it. Projected ownership of exactly 0.0 is a valid provider
+            # estimate and counts as populated. Older/manual player pools do not
+            # have this marker, so retain the conservative > 0 fallback there.
+            if "ownership_imported" in eligible.columns:
+                ownership_populated = eligible["ownership_imported"].fillna(
+                    False
+                ).astype(bool)
+            else:
+                ownership_populated = ownership > 0
+
+            owned_candidate_count = int(
+                (optimizer_candidates & ownership_populated).sum()
+            )
+            ownership_coverage = (
+                owned_candidate_count / candidate_count
+                if candidate_count
+                else 0.0
+            )
+
             if ownership_coverage < 0.50:
                 critical_errors.append(
                     "The selected strategy uses leverage, but projected "
-                    "ownership is populated for fewer than 50% of eligible "
-                    "players."
+                    "ownership is populated for fewer than 50% of players "
+                    "with positive projections."
                 )
 
         if 0 < coverage < 0.50:
             warnings.append(
-                f"Only {coverage:.0%} of eligible players have positive "
-                "projections. Review the import coverage before generating."
+                f"Only {coverage:.0%} of the full DraftKings player pool has "
+                "positive projections. This can be normal when the projection "
+                "provider omits deep reserves; unprojected players will not be "
+                "competitive unless locked."
             )
         elif 0.50 <= coverage < 0.80:
             warnings.append(
@@ -321,16 +350,34 @@ class OptimizerService:
                 "Player projections cannot be negative."
             )
 
-        for metric_name in ("ceiling", "floor"):
-            values = pd.to_numeric(players[metric_name], errors="coerce")
-            if values.isna().any():
-                raise ValueError(
-                    f"One or more players have an invalid {metric_name}."
-                )
-            if (values < 0).any():
-                raise ValueError(
-                    f"Player {metric_name} values cannot be negative."
-                )
+        ceiling_values = pd.to_numeric(
+            players["ceiling"],
+            errors="coerce",
+        )
+
+        if ceiling_values.isna().any():
+            raise ValueError(
+                "One or more players have an invalid ceiling."
+            )
+
+        if (ceiling_values < 0).any():
+            raise ValueError(
+                "Player ceiling values cannot be negative."
+            )
+
+        floor_values = pd.to_numeric(
+            players["floor"],
+            errors="coerce",
+        )
+
+        if floor_values.isna().any():
+            raise ValueError(
+                "One or more players have an invalid floor."
+            )
+
+        # A modeled DFS floor can legitimately be below zero, especially
+        # for defenses and low-volume players. Preserve the provider's
+        # downside estimate instead of rejecting an otherwise valid slate.
 
         ownership = pd.to_numeric(
             players["ownership"],
